@@ -1,0 +1,48 @@
+name: ISH-Anatomi Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: ubuntu-latest
+            target: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install root dependencies
+        run: npm install
+      - name: Validate local modules
+        run: npm test
+      - name: Validate Python clinical extension
+        run: npm run test:python
+      - name: Prepare real Human Atlas
+        run: npm run desktop:prepare
+      - name: Build desktop package
+        run: npx electron-builder --${{ matrix.target }} --publish never
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ish-anatomi-${{ matrix.target }}
+          path: |
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
