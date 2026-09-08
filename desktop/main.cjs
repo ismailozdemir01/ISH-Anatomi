@@ -6,11 +6,17 @@ let win;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
-async function compileIntent(text) {
-  const [intent, catalogModule] = await Promise.all([
+async function localModules() {
+  return Promise.all([
     import(path.join(root(), 'local-ai', 'intent.mjs')),
-    import(path.join(root(), 'local-ai', 'catalog.mjs'))
+    import(path.join(root(), 'local-ai', 'catalog.mjs')),
+    import(path.join(root(), 'local-ai', 'knowledge.mjs')),
+    import(path.join(root(), 'local-ai', 'study.mjs'))
   ]);
+}
+
+async function compileIntent(text) {
+  const [intent, catalogModule, knowledge] = await localModules();
   const result = intent.compileIntent(text);
   const catalog = await catalogModule.loadCatalog(root());
   const status = catalogModule.catalogStatus(catalog);
@@ -26,8 +32,20 @@ async function compileIntent(text) {
       search.conceptId = concept.id;
     }
   }
+  const question = knowledge.answerAnatomyQuestion(text);
+  if (question.status === 'KNOWN') result.knowledge = question;
   result.catalog = status;
   return result;
+}
+
+async function studyCard(text) {
+  const [, , , study] = await localModules();
+  return study.studyCard(text);
+}
+
+async function createQuiz(count, seed) {
+  const [, , , study] = await localModules();
+  return study.createQuiz(count, seed);
 }
 
 function viewerScript(actions) {
@@ -59,10 +77,10 @@ async function executeViewerActions(actions) {
 function assistantPanelScript() {
   return `(() => {
     if(document.getElementById('ish-local-assistant')) return;
-    const style=document.createElement('style'); style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:330px;z-index:2147483647;background:rgba(12,18,30,.96);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.4}';document.head.appendChild(style);
-    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div>';document.body.appendChild(box);
-    const q=box.querySelector('#ish-ai-q'),send=box.querySelector('#ish-ai-send'),status=box.querySelector('#ish-ai-status');
-    const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';try{const result=await window.ishAnatomi.compileIntent(value);const cat=result.catalog&&result.catalog.status==='READY'?' · '+result.catalog.parts+' parça / '+result.catalog.concepts+' kavram':'';status.textContent=result.answer+cat;await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
+    const style=document.createElement('style'); style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:350px;z-index:2147483647;background:rgba(12,18,30,.97);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.45}#ish-local-assistant .answer{margin-top:8px;color:#f8fafc;line-height:1.45}';document.head.appendChild(style);
+    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div><div class="answer" id="ish-ai-answer"></div>';document.body.appendChild(box);
+    const q=box.querySelector('#ish-ai-q'),send=box.querySelector('#ish-ai-send'),status=box.querySelector('#ish-ai-status'),answer=box.querySelector('#ish-ai-answer');
+    const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';answer.textContent='';try{const result=await window.ishAnatomi.compileIntent(value);const cat=result.catalog&&result.catalog.status==='READY'?' · '+result.catalog.parts+' parça / '+result.catalog.concepts+' kavram':'';status.textContent=result.answer+cat;if(result.knowledge?.status==='KNOWN')answer.textContent=result.knowledge.answer;await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
     send.addEventListener('click',run);q.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
   })()`;
 }
@@ -84,8 +102,10 @@ async function createWindow() {
   await win.webContents.executeJavaScript(assistantPanelScript());
 }
 
-ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion(),localAI:true,externalAI:false}));
+ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion(),localAI:true,externalAI:false,clinicalExtension:true}));
 ipcMain.handle('ai:compile',(_event,text)=>compileIntent(text));
+ipcMain.handle('study:card',(_event,text)=>studyCard(text));
+ipcMain.handle('study:quiz',(_event,count,seed)=>createQuiz(count,seed));
 ipcMain.handle('clinical:assess',(_event,payload)=>require('../clinical/engine.cjs').assess(payload));
 ipcMain.handle('viewer:actions',(_event,actions)=>executeViewerActions(actions));
 
