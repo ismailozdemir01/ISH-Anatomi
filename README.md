@@ -1,61 +1,80 @@
 # ISH-Anatomi
 
-**GPT-6 Astra inspired Interactive Human Anatomy Platform**
+**Interactive Human Anatomy + Clinical Intelligence — Desktop Application**
 
-ISH-Anatomi, 2.234 parçalık gerçek BodyParts3D tabanlı 3D insan anatomisi deneyimini eğitim odaklı bir platforma dönüştürmek için geliştirilmektedir.
+ISH-Anatomi, 2.234 parçalık gerçek BodyParts3D tabanlı 3D insan anatomisini eğitim, klinik anatomi ve ileride doğrulanmış tanısal yapay zekâ katmanlarına taşıyan **masaüstü uygulamasıdır**. Web sitesi ürünü değildir.
 
-## GPT-6 Astra araştırması
+## Konsept değişmedi
 
-Global araştırmada hedeflediğimiz 2.234 parçalık sistemin karşılığı doğrulandı: [ashemag/human-atlas](https://github.com/ashemag/human-atlas).
+Temel fikir aynıdır: insan vücudunu 2.234 ayrı anatomik yapı üzerinden görmek, seçmek, katmanlamak, izole etmek ve yapılar arasındaki ilişkileri AI yardımıyla anlamak. Bunun üzerine klinik fayda sağlayan katmanlar eklenir.
 
-Human Atlas; React + Three.js ile BodyParts3D 4.0 yetişkin erkek referans anatomisini 2.234 ayrı seçilebilir mesh, 15 anatomik sistem ve 3.432 adlandırılmış kavram olarak sunuyor. Arama, sistem katmanları, seçili yapıyı izole etme ve exploded anatomy görünümü bulunuyor.
+## Uygulama katmanları
 
-ISH-Anatomi bu motoru sahte/mock anatomik veri üretmeden, kaynak/provenance korunarak entegre etmektedir.
+- **3D Anatomy Engine:** 2.234 gerçek mesh, 15 anatomik sistem, 3.432 named/FMA concept
+- **Anatomy Knowledge Graph:** parent/child, komşuluk, damar-sinir-kas-kemik ilişkileri
+- **AI Anatomy Tutor:** doğal dil ile anatomi öğretimi
+- **AI → 3D:** kullanıcı isteğini anatomik yapı seçimi, görünürlük, izolasyon, kamera ve exploded-view işlemlerine dönüştürme
+- **Evidence Layer:** klinik/anatomik iddialar için kaynak, provenance, tarih ve güven bilgisi
+- **Clinical Anatomy:** patoloji eğitimi, prosedür anatomisi ve hasta eğitim modu
+- **Imaging Boundary:** yetkili ortamlarda DICOM/DICOMweb → anatomi görselleştirme altyapısı
+- **Diagnostic Boundary:** doğrulanmış klinik modeller için güvenli entegrasyon sözleşmesi; model yoksa sistem teşhis uydurmaz
+- **Desktop Security:** Electron context isolation, sandbox ve Node integration kapalı
 
-## Entegrasyon
+## Tanı sistemine dönüşüm stratejisi
 
-İlgili çalışma branch'i:
+Tanı özelliğini genel amaçlı sohbet modeline doğrudan vermiyoruz. Teşhis motoru ayrı ve doğrulanabilir bir klinik bileşen olacaktır:
 
-`astra-human-atlas-integration`
+`semptom + vital + laboratuvar + klinisyen gözlemi + DICOM/PACS`
 
-Kurulum:
+→ veri/provenance normalizasyonu
+
+→ 2.234 yapılık anatomi bilgi grafiğinde lokalizasyon
+
+→ modaliteye özel doğrulanmış ML modelleri
+
+→ kanıt birleştirme + belirsizlik kalibrasyonu
+
+→ ayırıcı bulgular
+
+→ klinisyen incelemesi / audit
+
+→ yalnızca tanımlanmış intended-use ve doğrulama koşullarında tanısal çıktı.
+
+Bu nedenle mevcut `clinical/core.py` kasıtlı olarak `NOT_CONFIGURED` / `INSUFFICIENT_DATA` durumlarını döndürür; sahte tanı üretmez. Tanısal ürün seviyesine geçiş; klinik validasyon, kalite yönetimi, siber güvenlik, veri gizliliği ve uygulanabilir tıbbi cihaz mevzuatı gerektirir.
+
+## Masaüstü çalıştırma
+
+Önce gerçek Human Atlas verisini getir:
 
 ```bash
 npm run atlas:bootstrap
 npm run atlas:install
 npm run atlas:check
 npm run atlas:build
-npm run atlas:dev
 ```
 
-`atlas:bootstrap` Human Atlas upstream'ini sabit commit `1c38bf35c254a891200d3cedecfd57abebe83d8d` üzerine pinler.
+Geliştirme:
 
-## Planlanan ISH katmanı
+```bash
+npm run desktop:dev
+```
 
-- 2.234 gerçek anatomik mesh
-- 15 anatomik sistem
-- 3.432 named/FMA concept
-- Türkçe + Latince arama
-- 3D seçim / zoom / orbit
-- katman görünürlüğü
-- isolate / exploded view
-- FastAPI anatomy API
-- gerçek anatomy metadata repository
-- AI anatomy assistant
-- OpenAI Responses API + `gpt-6-astra`
-- eğitim/quiz katmanı
-- kaynak ve lisans provenance
+Windows installer / Linux paketleri:
 
-## Veri ve lisans
+```bash
+npm run desktop:dist
+```
 
-Anatomik veri BodyParts3D 4.0 kaynaklıdır. Resmi BodyParts3D lisansı CC BY 4.0'dır. Dağıtımda aşağıdaki atıf korunmalıdır:
+`desktop:dist` öncesinde `atlas:build` çalıştırılmalıdır.
+
+## Gerçek veri / provenance
+
+Anatomik veri BodyParts3D 4.0 kaynaklıdır ve resmi lisans koşulları korunmalıdır:
 
 > BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International.
 
-Human Atlas uygulama kodu MIT lisanslıdır; upstream lisans ve attribution koşulları korunacaktır.
+Human Atlas uygulama kodu MIT lisanslıdır. Upstream commit'i sabitlenmiştir; mock anatomik veri kullanılmaz. Gerçek klinik veri kaynağı/modeli yapılandırılmadığında sistem bunu açıkça bildirir.
 
-Detaylı araştırma ve provenance: `docs/GPT6_ASTRA_HUMAN_ATLAS_RESEARCH.md`.
+## Regülasyon sınırı
 
-## Kapsam
-
-Bu proje eğitimsel anatomi görselleştirme içindir; teşhis veya cerrahi karar destek sistemi değildir.
+Mevcut ürün eğitimsel anatomi + klinik referans platformudur; tanı veya tedavi kararı veren tıbbi cihaz olarak sunulmaz. Tanısal kullanım için ayrı intended-use, risk yönetimi, klinik performans/validasyon, kalite sistemi ve uygun regülasyon yolu tasarlanmalıdır.
