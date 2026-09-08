@@ -1,80 +1,79 @@
 # ISH-Anatomi
 
-**Interactive Human Anatomy + Clinical Intelligence — Desktop Application**
+**GPT-6 Astra — İnteraktif İnsan Anatomisi Modülü**
 
-ISH-Anatomi, 2.234 parçalık gerçek BodyParts3D tabanlı 3D insan anatomisini eğitim, klinik anatomi ve ileride doğrulanmış tanısal yapay zekâ katmanlarına taşıyan **masaüstü uygulamasıdır**. Web sitesi ürünü değildir.
+ISH-Anatomi; 2.234 gerçek BodyParts3D anatomik yapısını masaüstünde etkileşimli 3D olarak sunan, arama, sistem katmanları, seçim, izolasyon, exploded view, eğitim ve **yerel AI → 3D** etkileşimini tek uygulamada birleştiren anatomik platformdur.
 
-## Konsept değişmedi
+## Tam kapsam
 
-Temel fikir aynıdır: insan vücudunu 2.234 ayrı anatomik yapı üzerinden görmek, seçmek, katmanlamak, izole etmek ve yapılar arasındaki ilişkileri AI yardımıyla anlamak. Bunun üzerine klinik fayda sağlayan katmanlar eklenir.
+- 2.234 gerçek anatomik mesh
+- 15 anatomik sistem
+- 3.432 named/FMA kavram
+- Kas, kemik, organ, damar, sinir ve diğer anatomik yapılar
+- 3D orbit / zoom / pan / seçim
+- Katman bazlı görünürlük
+- Yapı izolasyonu
+- Exploded anatomy görünümü
+- Anatomik arama ve yapı inceleme
+- Türkçe ve Latin/İngilizce sorgu desteği
+- Anatomik ilişkiler ve bilgi katmanı
+- Eğitim / çalışma / quiz altyapısı
+- Klinik anatomi bilgi katmanı
+- **Yerel AI anatomi asistanı**
+- Doğal dil → anatomik komut → 3D görüntüleme
+- Yerel klinik güvenlik sınırı
+- Windows masaüstü installer
+- Linux AppImage / deb
 
-## Uygulama katmanları
+## AI mimarisi
 
-- **3D Anatomy Engine:** 2.234 gerçek mesh, 15 anatomik sistem, 3.432 named/FMA concept
-- **Anatomy Knowledge Graph:** parent/child, komşuluk, damar-sinir-kas-kemik ilişkileri
-- **AI Anatomy Tutor:** doğal dil ile anatomi öğretimi
-- **AI → 3D:** kullanıcı isteğini anatomik yapı seçimi, görünürlük, izolasyon, kamera ve exploded-view işlemlerine dönüştürme
-- **Evidence Layer:** klinik/anatomik iddialar için kaynak, provenance, tarih ve güven bilgisi
-- **Clinical Anatomy:** patoloji eğitimi, prosedür anatomisi ve hasta eğitim modu
-- **Imaging Boundary:** yetkili ortamlarda DICOM/DICOMweb → anatomi görselleştirme altyapısı
-- **Diagnostic Boundary:** doğrulanmış klinik modeller için güvenli entegrasyon sözleşmesi; model yoksa sistem teşhis uydurmaz
-- **Desktop Security:** Electron context isolation, sandbox ve Node integration kapalı
+Uygulama başka bir AI sistemine API ile bağlanmaz.
 
-## Tanı sistemine dönüşüm stratejisi
+AI katmanı masaüstü uygulamasının içindedir. İlk katman, harici model/API gerektirmeyen yerel anatomi intent compiler'dır. Bu katman doğal dili güvenli, doğrulanabilir 3D komutlarına çevirir:
 
-Tanı özelliğini genel amaçlı sohbet modeline doğrudan vermiyoruz. Teşhis motoru ayrı ve doğrulanabilir bir klinik bileşen olacaktır:
+`kullanıcı sorusu → yerel intent engine → anatomik komut → 3D atlas`
 
-`semptom + vital + laboratuvar + klinisyen gözlemi + DICOM/PACS`
+Örnekler:
 
-→ veri/provenance normalizasyonu
+- `Kalbi göster` → kalp araması/seçimi
+- `İskelet sistemini arkadan göster` → iskelet + arka görünüm
+- `Damarları patlat` → damar sistemi + exploded view
+- `Böbreği izole et` → böbrek araması + izolasyon
 
-→ 2.234 yapılık anatomi bilgi grafiğinde lokalizasyon
+İleride daha güçlü yerel model inference eklenebilir; dış AI API zorunluluğu oluşturulmaz. Model/veri bulunamadığında sistem tahmin veya sahte sonuç üretmez.
 
-→ modaliteye özel doğrulanmış ML modelleri
+## Gerçek anatomi verisi
 
-→ kanıt birleştirme + belirsizlik kalibrasyonu
+Anatomi motoru upstream Human Atlas'ın sabitlenmiş gerçek verisini kullanır. Human Atlas; BodyParts3D 4.0 yetişkin erkek referans anatomisini 2.234 seçilebilir mesh, 15 sistem ve 3.432 isimli kavram ile sunar. citeturn0search0
 
-→ ayırıcı bulgular
+BodyParts3D verisinin CC BY 4.0 atfı korunur; Human Atlas uygulama kodunun MIT lisansı korunur.
 
-→ klinisyen incelemesi / audit
+## Klinik katman
 
-→ yalnızca tanımlanmış intended-use ve doğrulama koşullarında tanısal çıktı.
+Klinik özellikler anatomi konseptinin içinde kalır. Sistem klinik veri/model yapılandırılmadığında `NOT_CONFIGURED` veya `INSUFFICIENT_DATA` döndürür; tanı uydurmaz. Tanısal model ancak ayrıca doğrulanmış bir model, intended-use, validasyon ve gerekli kalite/regülasyon kontrolleri ile eklenebilir.
 
-Bu nedenle mevcut `clinical/core.py` kasıtlı olarak `NOT_CONFIGURED` / `INSUFFICIENT_DATA` durumlarını döndürür; sahte tanı üretmez. Tanısal ürün seviyesine geçiş; klinik validasyon, kalite yönetimi, siber güvenlik, veri gizliliği ve uygulanabilir tıbbi cihaz mevzuatı gerektirir.
+## Kurulum / geliştirme
 
-## Masaüstü çalıştırma
-
-Önce gerçek Human Atlas verisini getir:
+Node.js 22.13+ gerekir.
 
 ```bash
+npm install
+npm test
 npm run atlas:bootstrap
 npm run atlas:install
 npm run atlas:check
 npm run atlas:build
-```
-
-Geliştirme:
-
-```bash
 npm run desktop:dev
 ```
 
-Windows installer / Linux paketleri:
+Paketleme:
 
 ```bash
 npm run desktop:dist
 ```
 
-`desktop:dist` öncesinde `atlas:build` çalıştırılmalıdır.
+Bu komut gerçek Human Atlas verisini yeniden bootstrap eder, doğrular, build eder ve Electron paketini oluşturur.
 
-## Gerçek veri / provenance
+## Doğrulama kuralı
 
-Anatomik veri BodyParts3D 4.0 kaynaklıdır ve resmi lisans koşulları korunmalıdır:
-
-> BodyParts3D, © The Database Center for Life Science licensed under CC Attribution 4.0 International.
-
-Human Atlas uygulama kodu MIT lisanslıdır. Upstream commit'i sabitlenmiştir; mock anatomik veri kullanılmaz. Gerçek klinik veri kaynağı/modeli yapılandırılmadığında sistem bunu açıkça bildirir.
-
-## Regülasyon sınırı
-
-Mevcut ürün eğitimsel anatomi + klinik referans platformudur; tanı veya tedavi kararı veren tıbbi cihaz olarak sunulmaz. Tanısal kullanım için ayrı intended-use, risk yönetimi, klinik performans/validasyon, kalite sistemi ve uygun regülasyon yolu tasarlanmalıdır.
+Release yalnızca testleri geçen ve gerçek anatomi motoru doğrulanan sürümden oluşturulur. Mock anatomi veya uydurma klinik veri release'e dahil edilmez.
