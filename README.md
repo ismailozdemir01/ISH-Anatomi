@@ -26,6 +26,7 @@ ISH-Anatomi; 2.234 gerçek BodyParts3D anatomik yapısını masaüstünde etkile
 - Gerçek zamanlı görüntü kalite kapısı
 - Anatomik lokalizasyon ve 2D→3D registration arayüzü
 - Temporal frame/session tracking
+- Transport-neutral gerçek frame stream bridge
 - Klinik değerlendirme güvenlik katmanı
 - Windows masaüstü installer
 - Linux AppImage / deb
@@ -34,9 +35,9 @@ ISH-Anatomi; 2.234 gerçek BodyParts3D anatomik yapısını masaüstünde etkile
 
 `Ultrason probu → USB/Wi-Fi görüntü akışı → Bluetooth LE kontrol/telemetri → frame validation → kalite → anatomik lokalizasyon → 2D/3D registration → temporal tracking → klinik motor → 3D ISH-Anatomi`
 
-Bluetooth LE varsayılan olarak prob keşfi, eşleştirme, kimlik, batarya, sıcaklık ve kontrol için kullanılır. Ham ultrason görüntüsünün Bluetooth üzerinden taşındığı varsayılmaz; yüksek bant genişlikli görüntü için USB/Wi-Fi veya üreticinin belgelenmiş yüksek hızlı protokolü kullanılır.
+Bluetooth LE varsayılan olarak prob keşfi, eşleştirme, kimlik, batarya, sıcaklık ve kontrol için kullanılır. Ham ultrason görüntüsünün Bluetooth üzerinden taşındığı varsayılmaz; yüksek bant genişlikli görüntü için USB/Wi-Fi veya üreticinin belgelenmiş yüksek hızlı protokolü kullanılır. DICOM Real-Time Video kullanan cihazlar için ileride RTP tabanlı DICOM-RTV adapter katmanı eklenebilir; standart gerçek zamanlı video ve metadata akışını tanımlar.
 
-Gerçek üretici protokolü verilmeden sahte bir prob veya sahte görüntü akışı oluşturulmaz. `probe/manager.mjs` üretici adaptörleri için gerçek bağlantı sözleşmesini sağlar; cihaz bağlı değilse sistem `NOT_CONNECTED`, sinyal yoksa `NO_SIGNAL`, görüntü yetersizse `INSUFFICIENT` durumlarını kullanır.
+Gerçek üretici protokolü verilmeden sahte bir prob veya sahte görüntü akışı oluşturulmaz. `probe/manager.mjs` üretici adaptörleri için gerçek bağlantı sözleşmesini, `probe/stream.mjs` ise gerçek bir AsyncIterable frame kaynağını pipeline'a bağlayan transport-neutral köprüyü sağlar. Cihaz bağlı değilse sistem `NOT_CONNECTED`, frame kaynağı yoksa `NO_FRAME_SOURCE`, sinyal yoksa `NO_SIGNAL`, görüntü yetersizse `INSUFFICIENT` durumlarını kullanır.
 
 ## AI mimarisi
 
@@ -56,9 +57,9 @@ BodyParts3D verisinin CC BY 4.0 atfı korunur; Human Atlas uygulama kodunun MIT 
 
 ## Klinik / teşhis sınırı
 
-Canlı görüntüyü işlemek ile klinik olarak doğrulanmış teşhis üretmek aynı şey değildir. Mevcut sürüm gerçek görüntü alımı, kalite, pipeline, kayıt ve klinik güvenlik arayüzlerini kurar; klinik teşhis modeli ise ancak gerçek tıbbi veri, lisanslı/uygun eğitim verisi, bağımsız doğrulama, intended-use, risk yönetimi ve gerekli medikal cihaz/regülasyon süreçleri tamamlandıktan sonra tanısal kullanım için etkinleştirilebilir.
+Canlı görüntüyü işlemek ile klinik olarak doğrulanmış teşhis üretmek aynı şey değildir. FDA'nın Ocak 2026 Clinical Decision Support rehberine göre tıbbi görüntüleri (ultrason dahil) işleyen/analiz eden ve klinik anlam çıkaran yazılım fonksiyonları cihaz kapsamına girebilir. Bu nedenle tanısal kullanım için yalnızca yazılım kodu yeterli değildir; intended-use, veri yönetimi, bağımsız doğrulama, performans/klinik validasyon, risk yönetimi, siber güvenlik ve ilgili medikal cihaz kalite/regülasyon süreçleri de tamamlanmalıdır. citeturn0search0turn0search3turn0search8
 
-Bu nedenle sistem görüntü veya klinik kanıt yetersiz olduğunda `UNKNOWN`, `NOT_CONFIGURED`, `INSUFFICIENT_DATA` gibi durumları üretir ve tanı uydurmaz.
+Mevcut sürüm gerçek görüntü alımı, kalite, pipeline, temporal kayıt ve klinik güvenlik arayüzlerini kurar. Tanısal model; gerçek tıbbi veri, uygun/lisanslı eğitim verisi, bağımsız doğrulama ve gerekli süreçler tamamlanmadan etkinleştirilmez. Sistem görüntü veya klinik kanıt yetersiz olduğunda `UNKNOWN`, `NOT_CONFIGURED`, `INSUFFICIENT_DATA` gibi durumları üretir ve tanı uydurmaz.
 
 ## Kurulum / geliştirme
 
