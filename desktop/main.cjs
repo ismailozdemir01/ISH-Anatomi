@@ -3,8 +3,32 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 let win;
+let liveController;
+let probeManager;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
+
+async function imagingModules() {
+  return Promise.all([
+    import(path.join(root(), 'imaging', 'live-controller.mjs')),
+    import(path.join(root(), 'probe', 'manager.mjs')),
+    import(path.join(root(), 'clinical', 'engine.cjs'))
+  ]);
+}
+
+async function initImaging() {
+  const [{LiveImagingController}, {ProbeManager}, clinical] = await imagingModules();
+  probeManager = new ProbeManager();
+  liveController = new LiveImagingController({
+    anatomyLocator: async () => ({status:'NOT_CONFIGURED', reason:'REAL_ANATOMICAL_LOCALIZER_REQUIRED'}),
+    clinicalEngine: async ({frame, quality, anatomy}) => clinical.assess({
+      imaging: {modality:'US', frame, quality, anatomy}
+    })
+  });
+  liveController.onResult(result => {
+    if (win && !win.isDestroyed()) win.webContents.send('imaging:result', result);
+  });
+}
 
 async function localModules() {
   return Promise.all([
@@ -77,11 +101,14 @@ async function executeViewerActions(actions) {
 function assistantPanelScript() {
   return `(() => {
     if(document.getElementById('ish-local-assistant')) return;
-    const style=document.createElement('style'); style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:350px;z-index:2147483647;background:rgba(12,18,30,.97);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.45}#ish-local-assistant .answer{margin-top:8px;color:#f8fafc;line-height:1.45}';document.head.appendChild(style);
-    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div><div class="answer" id="ish-ai-answer"></div>';document.body.appendChild(box);
+    const style=document.createElement('style'); style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:360px;z-index:2147483647;background:rgba(12,18,30,.97);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.45}#ish-local-assistant .answer{margin-top:8px;color:#f8fafc;line-height:1.45}#ish-live{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12)}#ish-live .metric{display:flex;justify-content:space-between;margin:4px 0;color:#cbd5e1}#ish-live button{width:100%;margin-top:6px}';document.head.appendChild(style);
+    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div><div class="answer" id="ish-ai-answer"></div><section id="ish-live"><strong>Canlı Ultrason</strong><div class="metric"><span>Prob</span><span id="ish-probe">NOT_CONNECTED</span></div><div class="metric"><span>Görüntü</span><span id="ish-frame">NO_SIGNAL</span></div><div class="metric"><span>Anatomi</span><span id="ish-anatomy">UNKNOWN</span></div><div class="metric"><span>Klinik</span><span id="ish-clinical">UNKNOWN</span></div><button id="ish-probe-refresh">Prob durumunu yenile</button></section></aside>';document.body.appendChild(box);
     const q=box.querySelector('#ish-ai-q'),send=box.querySelector('#ish-ai-send'),status=box.querySelector('#ish-ai-status'),answer=box.querySelector('#ish-ai-answer');
     const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';answer.textContent='';try{const result=await window.ishAnatomi.compileIntent(value);const cat=result.catalog&&result.catalog.status==='READY'?' · '+result.catalog.parts+' parça / '+result.catalog.concepts+' kavram':'';status.textContent=result.answer+cat;if(result.knowledge?.status==='KNOWN')answer.textContent=result.knowledge.answer;await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
     send.addEventListener('click',run);q.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+    const refreshProbe=async()=>{try{const s=await window.ishAnatomi.probeStatus();box.querySelector('#ish-probe').textContent=s.status+(s.transport?' · '+s.transport:'');}catch(e){box.querySelector('#ish-probe').textContent='ERROR';}};
+    box.querySelector('#ish-probe-refresh').addEventListener('click',refreshProbe); refreshProbe();
+    window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.status||'UNKNOWN';});
   })()`;
 }
 
@@ -102,12 +129,17 @@ async function createWindow() {
   await win.webContents.executeJavaScript(assistantPanelScript());
 }
 
-ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion(),localAI:true,externalAI:false,clinicalExtension:true}));
+ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion(),localAI:true,externalAI:false,clinicalExtension:true,liveUltrasound:true,transports:['usb','wifi','bluetooth-le']}));
 ipcMain.handle('ai:compile',(_event,text)=>compileIntent(text));
 ipcMain.handle('study:card',(_event,text)=>studyCard(text));
 ipcMain.handle('study:quiz',(_event,count,seed)=>createQuiz(count,seed));
 ipcMain.handle('clinical:assess',(_event,payload)=>require('../clinical/engine.cjs').assess(payload));
 ipcMain.handle('viewer:actions',(_event,actions)=>executeViewerActions(actions));
+ipcMain.handle('probe:list',()=>probeManager?.list() ?? []);
+ipcMain.handle('probe:status',()=>probeManager?.status() ?? {status:'NOT_CONFIGURED'});
+ipcMain.handle('imaging:start',(_event,session)=>{if(!liveController)return {status:'NOT_CONFIGURED'};return {status:'STARTED',session:liveController.start(session)};});
+ipcMain.handle('imaging:stop',()=>liveController?.stop() ?? {status:'NOT_CONFIGURED'});
+ipcMain.handle('imaging:frame',(_event,frame)=>liveController?.push(frame) ?? {status:'NOT_CONFIGURED'});
 
-app.whenReady().then(async()=>{await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)createWindow();});});
+app.whenReady().then(async()=>{await initImaging();await createWindow();app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)createWindow();});});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});
