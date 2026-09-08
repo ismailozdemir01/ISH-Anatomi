@@ -63,5 +63,5 @@ export function buildEnhancementPlan(metrics = {}) {
 
 export function qualityGate(frame, threshold = 0.55) {
   const quality = assessFrameQuality(frame);
-  return {...quality, accepted: quality.score >= threshold};
+  return {...quality, accepted: quality.status !== QUALITY_STATUS.INSUFFICIENT && quality.score >= threshold};
 }
