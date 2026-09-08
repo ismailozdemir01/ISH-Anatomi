@@ -1,8 +1,8 @@
 {
   "name": "ish-anatomi",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
-  "description": "ISH-Anatomi — local-first interactive 3D human anatomy and real-time ultrasound imaging desktop application",
+  "description": "ISH-Anatomi — local-first interactive 3D human anatomy and real-time ultrasound imaging desktop application with evidence-backed medical knowledge",
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -11,7 +11,7 @@
     "atlas:dev": "npm --prefix vendor/human-atlas run dev -- --host 127.0.0.1",
     "atlas:build": "npm --prefix vendor/human-atlas run build",
     "atlas:check": "npm --prefix vendor/human-atlas run check",
-    "test": "node --test local-ai/*.test.mjs clinical/*.test.cjs imaging/*.test.mjs probe/*.test.mjs",
+    "test": "node --test local-ai/*.test.mjs clinical/*.test.cjs imaging/*.test.mjs probe/*.test.mjs knowledge/*.test.mjs",
     "test:python": "python -m unittest discover -s clinical -p 'test_*.py'",
     "desktop:dev": "electron .",
     "desktop:prepare": "npm run atlas:bootstrap && npm run atlas:install && npm run atlas:check && npm run atlas:build",
@@ -29,6 +29,7 @@
       "clinical/**/*",
       "imaging/**/*",
       "probe/**/*",
+      "knowledge/**/*",
       "scripts/**/*",
       "package.json",
       "README.md",
@@ -38,11 +39,7 @@
     ],
     "win": {"target": ["nsis"]},
     "linux": {"target": ["AppImage", "deb"]},
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "nsis": {"oneClick": false,"perMachine": false,"allowToChangeInstallationDirectory": true}
   },
   "license": "MIT"
 }
