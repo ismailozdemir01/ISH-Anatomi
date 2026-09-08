@@ -3,11 +3,31 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 let win;
-const atlasDir = () => path.join(app.getAppPath(), 'vendor', 'human-atlas');
+const root = () => app.getAppPath();
+const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
 async function compileIntent(text) {
-  const module = await import(path.join(app.getAppPath(), 'local-ai', 'intent.mjs'));
-  return module.compileIntent(text);
+  const [intent, catalogModule] = await Promise.all([
+    import(path.join(root(), 'local-ai', 'intent.mjs')),
+    import(path.join(root(), 'local-ai', 'catalog.mjs'))
+  ]);
+  const result = intent.compileIntent(text);
+  const catalog = await catalogModule.loadCatalog(root());
+  const status = catalogModule.catalogStatus(catalog);
+  const search = result.actions.find(a => a.type === 'search');
+  if (search && catalog) {
+    const concept = catalogModule.findConcept(catalog, search.query);
+    if (!concept) {
+      result.actions = result.actions.filter(a => a !== search);
+      result.answer = 'Bu ifade gerçek anatomi kataloğunda doğrulanamadı; modelde olmayan bir yapı uydurulmadı.';
+      result.type = 'catalog_miss';
+    } else {
+      search.query = concept.name;
+      search.conceptId = concept.id;
+    }
+  }
+  result.catalog = status;
+  return result;
 }
 
 function viewerScript(actions) {
@@ -18,7 +38,7 @@ function viewerScript(actions) {
     for (const a of actions) {
       if (a.type === 'search') {
         const input=[...document.querySelectorAll('input')].find(e => /structure|anatom|search|ara|find/i.test(e.getAttribute('placeholder')||'') || e.getAttribute('role')==='combobox');
-        if(input){input.focus(); const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; setter.call(input,a.query); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); setTimeout(()=>{ const result=[...document.querySelectorAll('[role="option"],button')].find(e=>text(e).includes(a.query.toLocaleLowerCase('tr-TR'))); if(result) result.click(); },250); }
+        if(input){input.focus(); const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; setter.call(input,a.query); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); setTimeout(()=>{ const result=[...document.querySelectorAll('[role="option"],button')].find(e=>text(e).includes(a.query.toLocaleLowerCase('tr-TR'))); if(result) result.click(); },300); }
       }
       if (a.type === 'system') clickText(a.id);
       if (a.type === 'view') clickText(a.view);
@@ -40,9 +60,9 @@ function assistantPanelScript() {
   return `(() => {
     if(document.getElementById('ish-local-assistant')) return;
     const style=document.createElement('style'); style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:330px;z-index:2147483647;background:rgba(12,18,30,.96);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.4}';document.head.appendChild(style);
-    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Komutlar yerel olarak işlenir.</div>';document.body.appendChild(box);
+    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div>';document.body.appendChild(box);
     const q=box.querySelector('#ish-ai-q'),send=box.querySelector('#ish-ai-send'),status=box.querySelector('#ish-ai-status');
-    const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';try{const result=await window.ishAnatomi.compileIntent(value);status.textContent=result.answer;await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
+    const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';try{const result=await window.ishAnatomi.compileIntent(value);status.textContent=result.answer+(result.catalog?.status==='READY'?` · ${result.catalog.parts} parça / ${result.catalog.concepts} kavram`: '');await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
     send.addEventListener('click',run);q.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
   })()`;
 }
