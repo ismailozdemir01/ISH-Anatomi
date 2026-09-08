@@ -1,51 +1,31 @@
 {
   "name": "ish-anatomi",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "ISH-Anatomi — desktop interactive human anatomy and clinical intelligence platform",
+  "description": "ISH-Anatomi — local-first interactive 3D human anatomy desktop application",
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
     "atlas:bootstrap": "node scripts/bootstrap-human-atlas.mjs",
     "atlas:install": "npm --prefix vendor/human-atlas ci",
-    "atlas:dev": "npm --prefix vendor/human-atlas run dev",
+    "atlas:dev": "npm --prefix vendor/human-atlas run dev -- --host 127.0.0.1",
     "atlas:build": "npm --prefix vendor/human-atlas run build",
     "atlas:check": "npm --prefix vendor/human-atlas run check",
+    "test": "node --test local-ai/*.test.mjs",
     "desktop:dev": "electron .",
-    "desktop:dist": "electron-builder"
+    "desktop:prepare": "npm run atlas:bootstrap && npm run atlas:install && npm run atlas:check && npm run atlas:build",
+    "desktop:dist": "npm run desktop:prepare && electron-builder"
   },
-  "engines": {
-    "node": ">=22.13.0"
-  },
-  "devDependencies": {
-    "electron": "^38.1.0",
-    "electron-builder": "^26.0.12"
-  },
+  "engines": {"node": ">=22.13.0"},
+  "devDependencies": {"electron": "^38.1.0", "electron-builder": "^26.0.12"},
   "build": {
     "appId": "com.ish.anatomi",
     "productName": "ISH-Anatomi",
     "asar": true,
-    "files": [
-      "desktop/**/*",
-      "clinical/**/*",
-      "scripts/**/*",
-      "package.json",
-      "README.md",
-      "docs/**/*",
-      "vendor/human-atlas/dist/**/*",
-      "vendor/human-atlas/package.json"
-    ],
-    "win": {
-      "target": ["nsis"]
-    },
-    "linux": {
-      "target": ["AppImage", "deb"]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "files": ["desktop/**/*","local-ai/**/*","clinical/**/*","scripts/**/*","package.json","README.md","docs/**/*","vendor/human-atlas/dist/**/*","vendor/human-atlas/package.json"],
+    "win": {"target": ["nsis"]},
+    "linux": {"target": ["AppImage","deb"]},
+    "nsis": {"oneClick": false,"perMachine": false,"allowToChangeInstallationDirectory": true}
   },
   "license": "MIT"
 }
