@@ -4,19 +4,14 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 let atlasProcess = null;
-const atlasDir = () => path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, '..'), 'vendor', 'human-atlas');
+const atlasDir = () => path.join(app.getAppPath(), 'vendor', 'human-atlas');
 
 function startAtlas() {
   const cwd = atlasDir();
   atlasProcess = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev', '--', '--host', '127.0.0.1'], {
-    cwd,
-    stdio: 'inherit',
-    shell: false,
-    env: { ...process.env, BROWSER: 'none' }
+    cwd, stdio: 'inherit', shell: false, env: { ...process.env, BROWSER: 'none' }
   });
-  atlasProcess.on('error', (error) => {
-    dialog.showErrorBox('ISH-Anatomi', `Anatomy engine could not start: ${error.message}`);
-  });
+  atlasProcess.on('error', (error) => dialog.showErrorBox('ISH-Anatomi', `Anatomy engine could not start: ${error.message}`));
 }
 
 async function waitForAtlas(url, timeoutMs = 30000) {
@@ -37,7 +32,7 @@ async function createWindow() {
   if (app.isPackaged) {
     const index = path.join(atlasDir(), 'dist', 'index.html');
     if (!fs.existsSync(index)) {
-      dialog.showErrorBox('ISH-Anatomi', 'Packaged anatomy engine is missing. Build the Human Atlas before packaging.');
+      dialog.showErrorBox('ISH-Anatomi', 'Packaged anatomy engine is missing. Run atlas:build before desktop:dist.');
       app.quit(); return;
     }
     await win.loadFile(index);
@@ -54,6 +49,5 @@ app.whenReady().then(async () => {
   await createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
-
 app.on('before-quit', () => { if (atlasProcess && !atlasProcess.killed) atlasProcess.kill(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
