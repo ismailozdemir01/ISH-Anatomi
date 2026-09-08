@@ -1,0 +1,18 @@
+{
+  "name": "ish-anatomi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ISH-Anatomi — GPT-6 Astra inspired interactive 3D human anatomy platform",
+  "type": "module",
+  "scripts": {
+    "atlas:bootstrap": "node scripts/bootstrap-human-atlas.mjs",
+    "atlas:install": "npm --prefix vendor/human-atlas ci",
+    "atlas:dev": "npm --prefix vendor/human-atlas run dev",
+    "atlas:build": "npm --prefix vendor/human-atlas run build",
+    "atlas:check": "npm --prefix vendor/human-atlas run check"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT"
+}
