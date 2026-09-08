@@ -26,7 +26,7 @@ test('supports isolation reset',()=>{
 
 test('never fabricates an unknown free-form structure',()=>{
   const r=compileIntent('xyz organını göster');
-  assert.equal(r.actions.some(a=>a.type==='search'),'false');
+  assert.equal(r.actions.some(a=>a.type==='search'),false);
 });
 
 test('empty input is deterministic',()=>assert.equal(compileIntent('').type,'empty'));
