@@ -1,0 +1,3 @@
+export const SAFETY_STATUS=Object.freeze({PASS:'PASS',BLOCKED:'BLOCKED',REVIEW_REQUIRED:'REVIEW_REQUIRED'});
+export function validateClinicalOutput({status,findings=[],evidence=[],modelValidated=false}={}){if(status==='NOT_CONFIGURED'||status==='INSUFFICIENT_DATA'||status==='NO_EVIDENCE')return {status:SAFETY_STATUS.BLOCKED,reason:status};if(!modelValidated)return {status:SAFETY_STATUS.BLOCKED,reason:'VALIDATED_MODEL_REQUIRED'};if(!Array.isArray(evidence)||!evidence.length)return {status:SAFETY_STATUS.BLOCKED,reason:'PROVENANCE_REQUIRED'};return {status:SAFETY_STATUS.REVIEW_REQUIRED,findings,evidence};}
+export function auditEvent({event,type='CLINICAL',source=null,model=null}={}){return {timestamp:new Date().toISOString(),event,type,source,model};}

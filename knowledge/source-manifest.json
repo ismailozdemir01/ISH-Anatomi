@@ -1,0 +1,7 @@
+{
+  "sources": [
+    {"id":"ncbi-bookshelf","provider":"NCBI Bookshelf","type":"TEXTBOOK","discoveryUrl":"https://www.ncbi.nlm.nih.gov/books/","licensePolicy":"VERIFY_PER_DOCUMENT","requiresRightsCheck":true},
+    {"id":"who-guidelines","provider":"World Health Organization","type":"GUIDELINE","discoveryUrl":"https://www.who.int/publications/who-guidelines","licensePolicy":"VERIFY_PER_DOCUMENT","requiresRightsCheck":true}
+  ],
+  "policy": "Only OPEN or LICENSED content may be ingested. Discovery metadata never implies redistribution rights."
+}
