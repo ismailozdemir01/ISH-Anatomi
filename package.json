@@ -11,13 +11,13 @@
     "atlas:dev": "npm --prefix vendor/human-atlas run dev -- --host 127.0.0.1",
     "atlas:build": "npm --prefix vendor/human-atlas run build",
     "atlas:check": "npm --prefix vendor/human-atlas run check",
-    "test": "node --test local-ai/*.test.mjs",
+    "test": "node --test local-ai/*.test.mjs clinical/*.test.cjs",
     "desktop:dev": "electron .",
     "desktop:prepare": "npm run atlas:bootstrap && npm run atlas:install && npm run atlas:check && npm run atlas:build",
     "desktop:dist": "npm run desktop:prepare && electron-builder"
   },
   "engines": {"node": ">=22.13.0"},
-  "devDependencies": {"electron": "^38.1.0", "electron-builder": "^26.0.12"},
+  "devDependencies": {"electron": "^38.1.0","electron-builder": "^26.0.12"},
   "build": {
     "appId": "com.ish.anatomi",
     "productName": "ISH-Anatomi",
