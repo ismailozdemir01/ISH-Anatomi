@@ -15,10 +15,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install desktop dependencies
         run: npm install
-      - name: Test local AI and safety boundaries
+      - name: Test local AI and clinical safety
         run: npm test
+      - name: Test Python clinical core
+        run: npm run test:python
       - name: Bootstrap pinned Human Atlas
         run: npm run atlas:bootstrap
       - name: Install Human Atlas
