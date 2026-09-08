@@ -3,7 +3,7 @@ import {FRAME_STATUS, validateFrame, updateSession} from './core.mjs';
 function clamp(v, min = 0, max = 1) { return Math.max(min, Math.min(max, Number(v) || 0)); }
 
 function meanAbsDifference(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || !a.length) return null;
+  if (!a || !b || typeof a.length !== 'number' || a.length !== b.length || !a.length) return null;
   let sum = 0;
   for (let i = 0; i < a.length; i += 1) sum += Math.abs((Number(a[i]) || 0) - (Number(b[i]) || 0));
   return sum / a.length;
@@ -11,11 +11,12 @@ function meanAbsDifference(a, b) {
 
 function temporalQuality(previous, current) {
   if (!previous) return {status: 'NO_PREVIOUS_FRAME', stability: null};
-  const prev = previous.frame?.pixels;
-  const next = current.frame?.pixels;
+  const prev = previous.data;
+  const next = current.data;
   const mad = meanAbsDifference(prev, next);
   if (mad === null) return {status: 'UNKNOWN', stability: null, reason: 'PIXEL_BUFFER_UNAVAILABLE'};
-  return {status: 'READY', meanAbsoluteDifference: mad, stability: clamp(1 - mad)};
+  const normalized = mad > 1 ? mad / 255 : mad;
+  return {status: 'READY', meanAbsoluteDifference: mad, stability: clamp(1 - normalized)};
 }
 
 function conservativeEnhancement(frame, quality) {
@@ -72,23 +73,14 @@ export class LiveUltrasoundPipeline {
       return this.#emit({status: FRAME_STATUS.INSUFFICIENT_QUALITY, quality});
     }
 
-    const temporal = temporalQuality(this.previous, {frame});
+    const temporal = temporalQuality(this.previous, frame);
     const enhancement = conservativeEnhancement(frame, quality);
     const anatomy = await this.anatomy(frame, {...quality, temporal, enhancement});
     const clinical = await this.clinical({frame, quality, temporal, enhancement, anatomy});
     this.session = updateSession(this.session, validation);
-    this.previous = {frame, validation};
+    this.previous = frame;
 
-    return this.#emit({
-      status: 'ANALYZED',
-      frame: validation,
-      quality,
-      temporal,
-      enhancement,
-      anatomy,
-      clinical,
-      session: this.session
-    });
+    return this.#emit({status: 'ANALYZED', frame: validation, quality, temporal, enhancement, anatomy, clinical, session: this.session});
   }
 
   #emit(result) { for (const listener of this.listeners) listener(result); return result; }
