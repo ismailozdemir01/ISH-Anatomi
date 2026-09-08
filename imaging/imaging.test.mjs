@@ -13,7 +13,7 @@ test('quality gate analyzes supplied pixels without inventing data', () => {
   const data = new Uint8Array(128*128); data.fill(120);
   const q = assessFrameQuality({width:128,height:128,timestamp:1,data});
   assert.equal(q.status, 'INSUFFICIENT');
-  assert.ok(q.reasons.includes('LOW_SIGNAL_OR_CONTRAST'));
+  assert.ok(q.reasons.includes('LOW_CONTRAST'));
 });
 
 test('registration remains hidden until anatomical localization exists', () => {
