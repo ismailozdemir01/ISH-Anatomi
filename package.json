@@ -1,8 +1,8 @@
 {
   "name": "ish-anatomi",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "ISH-Anatomi — local-first interactive 3D human anatomy desktop application",
+  "description": "ISH-Anatomi — local-first interactive 3D human anatomy and real-time ultrasound imaging desktop application",
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -11,7 +11,7 @@
     "atlas:dev": "npm --prefix vendor/human-atlas run dev -- --host 127.0.0.1",
     "atlas:build": "npm --prefix vendor/human-atlas run build",
     "atlas:check": "npm --prefix vendor/human-atlas run check",
-    "test": "node --test local-ai/*.test.mjs clinical/*.test.cjs",
+    "test": "node --test local-ai/*.test.mjs clinical/*.test.cjs imaging/*.test.mjs probe/*.test.mjs",
     "test:python": "python -m unittest discover -s clinical -p 'test_*.py'",
     "desktop:dev": "electron .",
     "desktop:prepare": "npm run atlas:bootstrap && npm run atlas:install && npm run atlas:check && npm run atlas:build",
@@ -27,6 +27,8 @@
       "desktop/**/*",
       "local-ai/**/*",
       "clinical/**/*",
+      "imaging/**/*",
+      "probe/**/*",
       "scripts/**/*",
       "package.json",
       "README.md",
