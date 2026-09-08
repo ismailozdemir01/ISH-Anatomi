@@ -1,18 +1,51 @@
 {
   "name": "ish-anatomi",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "ISH-Anatomi — GPT-6 Astra inspired interactive 3D human anatomy platform",
+  "description": "ISH-Anatomi — desktop interactive human anatomy and clinical intelligence platform",
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "atlas:bootstrap": "node scripts/bootstrap-human-atlas.mjs",
     "atlas:install": "npm --prefix vendor/human-atlas ci",
     "atlas:dev": "npm --prefix vendor/human-atlas run dev",
     "atlas:build": "npm --prefix vendor/human-atlas run build",
-    "atlas:check": "npm --prefix vendor/human-atlas run check"
+    "atlas:check": "npm --prefix vendor/human-atlas run check",
+    "desktop:dev": "electron .",
+    "desktop:dist": "electron-builder"
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "devDependencies": {
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.ish.anatomi",
+    "productName": "ISH-Anatomi",
+    "asar": true,
+    "files": [
+      "desktop/**/*",
+      "clinical/**/*",
+      "scripts/**/*",
+      "package.json",
+      "README.md",
+      "docs/**/*",
+      "vendor/human-atlas/dist/**/*",
+      "vendor/human-atlas/package.json"
+    ],
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "license": "MIT"
 }
