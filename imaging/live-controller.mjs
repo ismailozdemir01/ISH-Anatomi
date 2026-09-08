@@ -1,10 +1,12 @@
 import {LiveUltrasoundPipeline} from './pipeline.mjs';
 import {assessFrameQuality} from './quality.mjs';
 import {createRegistrationState, updateRegistration} from './anatomy-registration.mjs';
+import {TemporalFrameTracker} from './temporal.mjs';
 
 export class LiveImagingController {
-  constructor({anatomyLocator, clinicalEngine} = {}) {
+  constructor({anatomyLocator, clinicalEngine, temporalWindow = 30} = {}) {
     this.registration = createRegistrationState();
+    this.temporal = new TemporalFrameTracker({windowSize: temporalWindow});
     this.pipeline = new LiveUltrasoundPipeline({
       quality: async frame => assessFrameQuality(frame),
       anatomy: async (frame, quality) => anatomyLocator ? anatomyLocator(frame, quality) : {status:'NOT_CONFIGURED', reason:'ANATOMICAL_LOCALIZER_REQUIRED'},
@@ -12,13 +14,21 @@ export class LiveImagingController {
     });
   }
 
-  start(session) { return this.pipeline.start(session); }
+  start(session) {
+    this.registration = createRegistrationState();
+    this.temporal.reset();
+    return this.pipeline.start(session);
+  }
+
   stop() { return this.pipeline.stop(); }
   onResult(listener) { return this.pipeline.onResult(listener); }
 
   async push(frame) {
     const result = await this.pipeline.push(frame);
     if (result?.anatomy?.structureId) this.registration = updateRegistration(this.registration, result.anatomy);
-    return {...result, registration:this.registration};
+    if (result?.status === 'ANALYZED') {
+      result.temporal = this.temporal.push({timestamp:result.frame.timestamp, anatomy:result.anatomy, quality:result.quality});
+    }
+    return {...result, registration:this.registration, temporal:result.temporal ?? this.temporal.snapshot()};
   }
 }
