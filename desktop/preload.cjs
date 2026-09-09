@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   liveStart: (session) => ipcRenderer.invoke('imaging:start', session),
   liveStop: () => ipcRenderer.invoke('imaging:stop'),
   liveFrame: (frame) => ipcRenderer.invoke('imaging:frame', frame),
+  phoneCameraStatus: () => ipcRenderer.invoke('phone-camera:status'),
+  phoneCameraStop: () => ipcRenderer.invoke('phone-camera:stop'),
   onLiveResult: (handler) => ipcRenderer.on('imaging:result', (_event, result) => handler(result)),
-  onViewerActions: (handler) => ipcRenderer.on('viewer:actions:apply', (_event, actions) => handler(actions))
+  onViewerActions: (handler) => ipcRenderer.on('viewer:actions:apply', (_event, actions) => handler(actions)),
+  onPhoneCameraInfo: (handler) => ipcRenderer.on('phone-camera:info', (_event, info) => handler(info)),
+  onPhoneCameraFrame: (handler) => ipcRenderer.on('phone-camera:frame', (_event, payload) => handler(payload)),
+  onPhoneCameraPose: (handler) => ipcRenderer.on('phone-camera:pose', (_event, pose) => handler(pose))
 });
