@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   liveFrame: (frame) => ipcRenderer.invoke('imaging:frame', frame),
   phoneCameraStatus: () => ipcRenderer.invoke('phone-camera:status'),
   phoneCameraStop: () => ipcRenderer.invoke('phone-camera:stop'),
+  setVirtualCamera: (enabled) => ipcRenderer.invoke('phone-camera:set-virtual', Boolean(enabled)),
+  virtualCameraStatus: () => ipcRenderer.invoke('phone-camera:virtual-status'),
   onLiveResult: (handler) => ipcRenderer.on('imaging:result', (_event, result) => handler(result)),
   onViewerActions: (handler) => ipcRenderer.on('viewer:actions:apply', (_event, actions) => handler(actions)),
   onPhoneCameraInfo: (handler) => ipcRenderer.on('phone-camera:info', (_event, info) => handler(info)),
