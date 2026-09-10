@@ -10,10 +10,23 @@ test('starts a local phone camera transport with a secret URL', async () => {
   assert.equal(info.status,'READY');
   assert.ok(info.port > 0);
   assert.equal(info.urls.length,0);
+  assert.equal(info.fps,15);
+  assert.equal(info.secureContextRequired,true);
   const page = await request(`http://127.0.0.1:${info.port}/camera/${server.secret}`);
   assert.equal(page.status,200);
-  assert.match(await page.text(),/ISH-Anatomi/);
+  const html = await page.text();
+  assert.match(html,/ISH-Anatomi/);
+  assert.match(html,/getUserMedia/);
+  assert.match(html,/HTTPS/);
+  assert.match(html,/Durdur/);
   await server.stop();
+});
+
+test('clamps the live camera target to a safe 1..30 FPS range', async () => {
+  const low = new LocalPhoneCameraServer({host:'127.0.0.1',port:0,fps:0});
+  const high = new LocalPhoneCameraServer({host:'127.0.0.1',port:0,fps:99});
+  assert.equal(low.fps,15);
+  assert.equal(high.fps,30);
 });
 
 test('rejects non-JPEG frames and invalid poses', async () => {
