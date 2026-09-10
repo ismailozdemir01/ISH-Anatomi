@@ -1,25 +1,37 @@
+import {createPoseFilter, filterPose} from './pose-filter.mjs';
+
 const DEFAULTS = Object.freeze({
   sensitivityX: 0.018,
   sensitivityY: 0.014,
   deadZone: 0.35,
-  maxStep: 18
+  maxStep: 18,
+  poseSmoothing: 0.28,
+  maxPoseDelta: 45
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
 export function createVirtualCameraState(options = {}) {
+  const merged = {...DEFAULTS, ...options};
   return {
-    ...DEFAULTS,
-    ...options,
+    ...merged,
     lastAlpha: null,
     lastBeta: null,
     lastGamma: null,
-    active: false
+    active: false,
+    poseFilter: createPoseFilter({alpha: merged.poseSmoothing, maxDeltaPerSample: merged.maxPoseDelta})
   };
 }
 
 export function enableVirtualCamera(state, enabled = true) {
-  return {...state, active: Boolean(enabled), lastAlpha: null, lastBeta: null, lastGamma: null};
+  return {
+    ...state,
+    active: Boolean(enabled),
+    lastAlpha: null,
+    lastBeta: null,
+    lastGamma: null,
+    poseFilter: createPoseFilter({alpha: state.poseSmoothing, maxDeltaPerSample: state.maxPoseDelta})
+  };
 }
 
 function angleDelta(next, previous) {
@@ -38,11 +50,19 @@ function axisStep(delta, sensitivity, deadZone, maxStep) {
 
 export function mapPoseToCameraDrag(state, pose = {}) {
   const next = {...state};
-  const alpha = Number(pose.alpha);
-  const beta = Number(pose.beta);
-  const gamma = Number(pose.gamma);
+  const filtered = filterPose(state.poseFilter ?? createPoseFilter(), pose);
+  if (filtered.status !== 'READY') return {state: next, drag: null, status: filtered.status};
+  const current = filtered.pose;
+  const alpha = Number(current.alpha);
+  const beta = Number(current.beta);
+  const gamma = Number(current.gamma);
   if (![alpha, beta, gamma].every(Number.isFinite)) return {state: next, drag: null, status: 'INVALID_POSE'};
-  if (!state.active) return {state: {...next, lastAlpha: alpha, lastBeta: beta, lastGamma: gamma}, drag: null, status: 'DISABLED'};
+  if (!state.active) {
+    next.lastAlpha = alpha;
+    next.lastBeta = beta;
+    next.lastGamma = gamma;
+    return {state: next, drag: null, status: 'DISABLED'};
+  }
 
   const da = angleDelta(alpha, state.lastAlpha);
   const db = angleDelta(beta, state.lastBeta);
