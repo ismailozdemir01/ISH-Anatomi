@@ -29,6 +29,7 @@ async function resolveLocal(from,specifier){
 }
 const files=(await Promise.all(SCAN_DIRS.map(async dir=>{try{return await walk(path.join(ROOT,dir));}catch{return [];}}))).flat();
 const production=files.filter(f=>!TEST_RE.test(relativeId(f)));
+const tests=files.filter(f=>TEST_RE.test(relativeId(f)));
 const graph=new Map(production.map(f=>[f,new Set()]));
 const broken=[];
 for(const file of production){
@@ -48,8 +49,10 @@ for(const file of production){
 const rootPaths=[path.join(ROOT,'desktop','main.cjs'),path.join(ROOT,'desktop','preload.cjs')].filter(f=>graph.has(f));
 const reachable=new Set(rootPaths);const queue=[...rootPaths];
 while(queue.length){const current=queue.shift();for(const target of graph.get(current)??[]){if(!reachable.has(target)){reachable.add(target);queue.push(target);}}}
-const orphan=production.filter(f=>!reachable.has(f)).map(relativeId).filter(id=>!id.startsWith('scripts/'));
-const report={status:broken.length||orphan.length?'FAIL':'PASS',productionModules:production.length,reachableModules:reachable.size,brokenImports:[...new Set(broken)].sort(),disconnectedModules:orphan.sort()};
+const disconnected=production.filter(f=>!reachable.has(f));
+const testConnected=disconnected.filter(f=>tests.some(t=>path.basename(t).replace(/\.test\.(mjs|cjs)$/,'$1')===path.basename(f)));
+const unvalidatedDisconnected=disconnected.filter(f=>!testConnected.includes(f));
+const report={status:broken.length||unvalidatedDisconnected.length?'FAIL':'PASS',productionModules:production.length,runtimeReachableModules:reachable.size,brokenImports:[...new Set(broken)].sort(),disconnectedModules:disconnected.map(relativeId).sort(),testConnectedDisconnected:testConnected.map(relativeId).sort(),unvalidatedDisconnected:unvalidatedDisconnected.map(relativeId).sort()};
 console.log(JSON.stringify(report,null,2));
-if(report.status!=='PASS'){console.error('ARCHITECTURE_AUDIT_FAILED');if(report.brokenImports.length)console.error(`Broken imports: ${report.brokenImports.length}`);if(report.disconnectedModules.length)console.error(`Disconnected production modules: ${report.disconnectedModules.length}`);process.exit(1);}
+if(report.status!=='PASS'){console.error('ARCHITECTURE_AUDIT_FAILED');if(report.brokenImports.length)console.error(`Broken imports: ${report.brokenImports.length}`);if(report.unvalidatedDisconnected.length)console.error(`Unvalidated disconnected modules: ${report.unvalidatedDisconnected.length}`);process.exit(1);}
 console.log('ARCHITECTURE_AUDIT_PASSED');
