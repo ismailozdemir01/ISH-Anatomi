@@ -1,60 +1,12 @@
 import {LiveUltrasoundPipeline} from './pipeline.mjs';
 import {assessFrameQuality} from './quality.mjs';
-import {createRegistrationState, updateRegistration, registrationOverlay, validateTransform} from './anatomy-registration.mjs';
-import {mapUltrasoundFinding, atlasOverlayGate} from './atlas-mapping.mjs';
-
-export class LiveImagingController {
-  constructor({anatomyLocator, clinicalEngine, temporalWindow = 30, calibration = null, atlasCatalog = []} = {}) {
-    this.registration = createRegistrationState();
-    this.calibration = calibration;
-    this.atlasCatalog = Array.isArray(atlasCatalog) ? atlasCatalog : [];
-    this.pipeline = new LiveUltrasoundPipeline({
-      quality: async frame => assessFrameQuality(frame),
-      anatomy: async (frame, quality) => anatomyLocator ? anatomyLocator(frame, quality) : {status:'NOT_CONFIGURED', reason:'ANATOMICAL_LOCALIZER_REQUIRED'},
-      clinical: async payload => {
-        if (!clinicalEngine) return {status:'NOT_CONFIGURED', findings:[], diagnosticCandidates:[], reason:'CLINICAL_ENGINE_REQUIRED'};
-        const anatomy = payload?.anatomy ?? {};
-        const registrationValid = Boolean(
-          anatomy.structureId &&
-          Number(anatomy.confidence) >= 0.85 &&
-          validateTransform(anatomy.transform).valid
-        );
-        return clinicalEngine({
-          ...payload,
-          qualityAccepted: ['GOOD','FAIR'].includes(payload?.quality?.status),
-          calibrationValid: Boolean(payload?.calibration?.valid),
-          temporalStable: payload?.temporalTracking?.status === 'STABLE',
-          registrationValid,
-          registrationGate: registrationValid ? 'TRACKING_ELIGIBLE' : 'TRACKING_REQUIRED'
-        });
-      },
-      calibration
-    });
-    if (temporalWindow !== 30) this.pipeline.temporalTracker.windowSize = temporalWindow;
-  }
-
-  start(session) {
-    this.registration = createRegistrationState();
-    return this.pipeline.start(session);
-  }
-
-  stop() { return this.pipeline.stop(); }
-  onResult(listener) { return this.pipeline.onResult(listener); }
-
-  async push(frame) {
-    const result = await this.pipeline.push(frame);
-    if (result?.anatomy?.structureId) {
-      this.registration = updateRegistration(this.registration, result.anatomy, result?.frame?.timestamp ?? Date.now());
-    }
-    const registrationOverlayResult = registrationOverlay(this.registration, result?.frame?.timestamp ?? Date.now());
-    const atlasMapping = result?.anatomy?.structureId
-      ? mapUltrasoundFinding({structureId:result.anatomy.structureId,confidence:result.anatomy.confidence,transform:result.anatomy.transform,plane:result.anatomy.plane}, this.atlasCatalog)
-      : {status:'INVALID',reason:'STRUCTURE_ID_REQUIRED'};
-    const atlasOverlay = atlasOverlayGate(atlasMapping, {
-      registrationStatus:this.registration.status,
-      calibrated:Boolean(result?.calibration?.overlayAllowed),
-      qualityStatus:result?.quality?.status ?? 'UNKNOWN'
-    });
-    return {...result, registration:this.registration, registrationOverlay:registrationOverlayResult, atlasMapping, atlasOverlay};
-  }
+import {createRegistrationState,updateRegistration,registrationOverlay,validateTransform} from './anatomy-registration.mjs';
+import {mapUltrasoundFinding,atlasOverlayGate} from './atlas-mapping.mjs';
+import {resolveReferenceGroup} from '../knowledge/anatomy-reference-groups.mjs';
+export class LiveImagingController{
+ constructor({anatomyLocator,clinicalEngine,temporalWindow=30,calibration=null,atlasCatalog=[]}={}){this.registration=createRegistrationState();this.calibration=calibration;this.atlasCatalog=Array.isArray(atlasCatalog)?atlasCatalog:[];this.pipeline=new LiveUltrasoundPipeline({quality:async frame=>assessFrameQuality(frame),anatomy:async(frame,quality)=>anatomyLocator?anatomyLocator(frame,quality):{status:'NOT_CONFIGURED',reason:'ANATOMICAL_LOCALIZER_REQUIRED'},clinical:async payload=>{if(!clinicalEngine)return{status:'NOT_CONFIGURED',findings:[],diagnosticCandidates:[],reason:'CLINICAL_ENGINE_REQUIRED'};const anatomy=payload?.anatomy??{};const group=resolveReferenceGroup({structureId:anatomy.structureId,groupId:anatomy.groupId,catalog:this.atlasCatalog});const registrationValid=Boolean(anatomy.structureId&&Number(anatomy.confidence)>=0.85&&validateTransform(anatomy.transform).valid);return clinicalEngine({...payload,anatomy:{...anatomy,groupId:group.groupId??null},structureId:group.structureId??anatomy.structureId??null,groupId:group.groupId??null,qualityAccepted:['GOOD','FAIR'].includes(payload?.quality?.status),calibrationValid:Boolean(payload?.calibration?.valid),temporalStable:payload?.temporalTracking?.status==='STABLE',registrationValid,registrationGate:registrationValid?'TRACKING_ELIGIBLE':'TRACKING_REQUIRED'});},calibration});if(temporalWindow!==30)this.pipeline.temporalTracker.windowSize=temporalWindow;}
+ start(session){this.registration=createRegistrationState();return this.pipeline.start(session);}
+ stop(){return this.pipeline.stop();}
+ onResult(listener){return this.pipeline.onResult(listener);}
+ async push(frame){const result=await this.pipeline.push(frame);if(result?.anatomy?.structureId)this.registration=updateRegistration(this.registration,result.anatomy,result?.frame?.timestamp??Date.now());const registrationOverlayResult=registrationOverlay(this.registration,result?.frame?.timestamp??Date.now());const atlasMapping=result?.anatomy?.structureId?mapUltrasoundFinding({structureId:result.anatomy.structureId,groupId:result.anatomy.groupId,confidence:result.anatomy.confidence,transform:result.anatomy.transform},this.atlasCatalog):{status:'INVALID',reason:'STRUCTURE_ID_REQUIRED'};const atlasOverlay=atlasOverlayGate(atlasMapping,{registrationStatus:this.registration.status,calibrated:Boolean(result?.calibration?.overlayAllowed),qualityStatus:result?.quality?.status??'UNKNOWN'});return{...result,registration:this.registration,registrationOverlay:registrationOverlayResult,atlasMapping,atlasOverlay};}
 }
