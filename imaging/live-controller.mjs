@@ -1,22 +1,23 @@
 import {LiveUltrasoundPipeline} from './pipeline.mjs';
 import {assessFrameQuality} from './quality.mjs';
-import {createRegistrationState, updateRegistration} from './anatomy-registration.mjs';
-import {TemporalFrameTracker} from './temporal.mjs';
+import {createRegistrationState, updateRegistration, registrationOverlay} from './anatomy-registration.mjs';
 
 export class LiveImagingController {
-  constructor({anatomyLocator, clinicalEngine, temporalWindow = 30} = {}) {
+  constructor({anatomyLocator, clinicalEngine, temporalWindow = 30, calibration = null, atlasCatalog = []} = {}) {
     this.registration = createRegistrationState();
-    this.temporal = new TemporalFrameTracker({windowSize: temporalWindow});
+    this.calibration = calibration;
+    this.atlasCatalog = Array.isArray(atlasCatalog) ? atlasCatalog : [];
     this.pipeline = new LiveUltrasoundPipeline({
       quality: async frame => assessFrameQuality(frame),
       anatomy: async (frame, quality) => anatomyLocator ? anatomyLocator(frame, quality) : {status:'NOT_CONFIGURED', reason:'ANATOMICAL_LOCALIZER_REQUIRED'},
-      clinical: async payload => clinicalEngine ? clinicalEngine(payload) : {status:'NOT_CONFIGURED', findings:[], diagnosticCandidates:[], reason:'CLINICAL_ENGINE_REQUIRED'}
+      clinical: async payload => clinicalEngine ? clinicalEngine(payload) : {status:'NOT_CONFIGURED', findings:[], diagnosticCandidates:[], reason:'CLINICAL_ENGINE_REQUIRED'},
+      calibration
     });
+    if (temporalWindow !== 30) this.pipeline.temporalTracker.windowSize = temporalWindow;
   }
 
   start(session) {
     this.registration = createRegistrationState();
-    this.temporal.reset();
     return this.pipeline.start(session);
   }
 
@@ -25,10 +26,10 @@ export class LiveImagingController {
 
   async push(frame) {
     const result = await this.pipeline.push(frame);
-    if (result?.anatomy?.structureId) this.registration = updateRegistration(this.registration, result.anatomy);
-    if (result?.status === 'ANALYZED') {
-      result.temporal = this.temporal.push({timestamp:result.frame.timestamp, anatomy:result.anatomy, quality:result.quality});
+    if (result?.anatomy?.structureId) {
+      this.registration = updateRegistration(this.registration, result.anatomy, result?.frame?.timestamp ?? Date.now());
     }
-    return {...result, registration:this.registration, temporal:result.temporal ?? this.temporal.snapshot()};
+    const overlay = registrationOverlay(this.registration, result?.frame?.timestamp ?? Date.now());
+    return {...result, registration:this.registration, registrationOverlay:overlay};
   }
 }
