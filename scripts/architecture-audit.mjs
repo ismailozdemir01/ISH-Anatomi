@@ -50,7 +50,7 @@ const rootPaths=[path.join(ROOT,'desktop','main.cjs'),path.join(ROOT,'desktop','
 const reachable=new Set(rootPaths);const queue=[...rootPaths];
 while(queue.length){const current=queue.shift();for(const target of graph.get(current)??[]){if(!reachable.has(target)){reachable.add(target);queue.push(target);}}}
 const disconnected=production.filter(f=>!reachable.has(f));
-const testConnected=disconnected.filter(f=>tests.some(t=>path.basename(t).replace(/\.test\.(mjs|cjs)$/,'$1')===path.basename(f)));
+const testConnected=disconnected.filter(f=>{const base=path.basename(f);const ext=path.extname(f);const stem=base.slice(0,-ext.length);return tests.some(t=>path.basename(t)===`${stem}.test${ext}`);});
 const unvalidatedDisconnected=disconnected.filter(f=>!testConnected.includes(f));
 const report={status:broken.length||unvalidatedDisconnected.length?'FAIL':'PASS',productionModules:production.length,runtimeReachableModules:reachable.size,brokenImports:[...new Set(broken)].sort(),disconnectedModules:disconnected.map(relativeId).sort(),testConnectedDisconnected:testConnected.map(relativeId).sort(),unvalidatedDisconnected:unvalidatedDisconnected.map(relativeId).sort()};
 console.log(JSON.stringify(report,null,2));
