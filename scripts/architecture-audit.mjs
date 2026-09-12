@@ -7,7 +7,7 @@ const SCAN_DIRS = ['desktop', 'local-ai', 'clinical', 'imaging', 'probe', 'knowl
 const EXTENSIONS = new Set(['.mjs', '.cjs']);
 const TEST_RE = /(?:^|[\\/])[^\\/]+\.test\.(?:mjs|cjs)$/;
 const IMPORT_RE = /(?:import\\s+(?:[^'";]+?\\s+from\\s+)?|import\\s*\\(|require\\s*\()\\s*['"]([^'"]+)['"]/g;
-const DYNAMIC_ROOT_RE = /path\.join\\(root\\(\\),\\s*'([^']+)'\\s*,\\s*'([^']+)'\\)/g;
+const DYNAMIC_ROOT_RE = /path\.join\\(root\\(\\),\\s*'([^']+)'\\s*,\\s*'([^']+\\.(?:mjs|cjs))'\\)/g;
 
 async function walk(dir) {
   const out = [];
