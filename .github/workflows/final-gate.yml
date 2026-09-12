@@ -1,0 +1,76 @@
+name: ISH-Anatomi Final Gate
+
+on:
+  workflow_run:
+    workflows: ["ISH-Anatomi CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  gate:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            artifact: ish-anatomi-windows-final
+          - os: ubuntu-latest
+            target: linux
+            artifact: ish-anatomi-linux-final
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Re-run JavaScript tests on release candidate
+        run: npm test
+
+      - name: Re-run Python clinical tests on release candidate
+        run: npm run test:python
+
+      - name: Prepare and validate Human Atlas
+        run: npm run desktop:prepare
+
+      - name: Build final desktop package
+        run: npx electron-builder --${{ matrix.target }} --publish never
+
+      - name: Verify package output exists
+        shell: bash
+        run: |
+          test -d dist
+          if [ "${{ matrix.target }}" = "win" ]; then test -n "$(find dist -maxdepth 1 -type f -name '*.exe' -print -quit)"; fi
+          if [ "${{ matrix.target }}" = "linux" ]; then test -n "$(find dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)"; fi
+
+      - name: Upload final package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
