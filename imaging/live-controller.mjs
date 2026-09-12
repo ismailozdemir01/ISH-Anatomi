@@ -1,6 +1,6 @@
 import {LiveUltrasoundPipeline} from './pipeline.mjs';
 import {assessFrameQuality} from './quality.mjs';
-import {createRegistrationState, updateRegistration, registrationOverlay} from './anatomy-registration.mjs';
+import {createRegistrationState, updateRegistration, registrationOverlay, validateTransform} from './anatomy-registration.mjs';
 import {mapUltrasoundFinding, atlasOverlayGate} from './atlas-mapping.mjs';
 
 export class LiveImagingController {
@@ -11,7 +11,23 @@ export class LiveImagingController {
     this.pipeline = new LiveUltrasoundPipeline({
       quality: async frame => assessFrameQuality(frame),
       anatomy: async (frame, quality) => anatomyLocator ? anatomyLocator(frame, quality) : {status:'NOT_CONFIGURED', reason:'ANATOMICAL_LOCALIZER_REQUIRED'},
-      clinical: async payload => clinicalEngine ? clinicalEngine(payload) : {status:'NOT_CONFIGURED', findings:[], diagnosticCandidates:[], reason:'CLINICAL_ENGINE_REQUIRED'},
+      clinical: async payload => {
+        if (!clinicalEngine) return {status:'NOT_CONFIGURED', findings:[], diagnosticCandidates:[], reason:'CLINICAL_ENGINE_REQUIRED'};
+        const anatomy = payload?.anatomy ?? {};
+        const registrationValid = Boolean(
+          anatomy.structureId &&
+          Number(anatomy.confidence) >= 0.85 &&
+          validateTransform(anatomy.transform).valid
+        );
+        return clinicalEngine({
+          ...payload,
+          qualityAccepted: ['GOOD','FAIR'].includes(payload?.quality?.status),
+          calibrationValid: Boolean(payload?.calibration?.valid),
+          temporalStable: payload?.temporalTracking?.status === 'STABLE',
+          registrationValid,
+          registrationGate: registrationValid ? 'TRACKING_ELIGIBLE' : 'TRACKING_REQUIRED'
+        });
+      },
       calibration
     });
     if (temporalWindow !== 30) this.pipeline.temporalTracker.windowSize = temporalWindow;
