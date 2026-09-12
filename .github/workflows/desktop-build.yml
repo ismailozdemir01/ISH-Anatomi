@@ -1,0 +1,64 @@
+name: ISH-Anatomi Desktop Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            artifact: ish-anatomi-linux
+          - os: windows-latest
+            target: win
+            artifact: ish-anatomi-windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install root dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Prepare pinned Human Atlas and desktop runtime
+        run: npm run desktop:prepare
+
+      - name: Verify desktop entrypoint
+        run: node --check desktop/main.cjs
+
+      - name: Build Windows NSIS
+        if: matrix.target == 'win'
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Build Linux packages
+        if: matrix.target == 'linux'
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Upload packaged application
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
