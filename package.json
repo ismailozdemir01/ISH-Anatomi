@@ -12,7 +12,7 @@
     "atlas:build": "npm --prefix vendor/human-atlas run build",
     "atlas:check": "npm --prefix vendor/human-atlas run check",
     "audit:architecture": "node scripts/architecture-audit.mjs",
-    "test": "node --check desktop/main.cjs && node --check desktop/preload.cjs && npm run audit:architecture && node --test local-ai/*.test.mjs clinical/*.test.cjs imaging/*.test.mjs probe/*.test.mjs knowledge/*.test.mjs camera/*.test.mjs",
+    "test": "node --check desktop/main.cjs && node --check desktop/preload.cjs && npm run audit:architecture && node --test local-ai/*.test.mjs clinical/*.test.mjs clinical/*.test.cjs imaging/*.test.mjs probe/*.test.mjs knowledge/*.test.mjs camera/*.test.mjs",
     "test:python": "python -m unittest discover -s clinical -p 'test_*.py'",
     "desktop:dev": "electron .",
     "desktop:prepare": "npm run atlas:bootstrap && npm run atlas:install && npm run atlas:check && npm run atlas:build",
