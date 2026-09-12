@@ -5,6 +5,10 @@ const fs = require('node:fs');
 let win;
 let liveController;
 let probeManager;
+let probeStream;
+let inferenceAdapter;
+let clinicalAssessment;
+let clinicalEvidenceStore;
 let phoneCamera;
 let virtualCamera;
 let virtualCameraState;
@@ -17,17 +21,29 @@ async function imagingModules() {
   return Promise.all([
     import(path.join(root(), 'imaging', 'live-controller.mjs')),
     import(path.join(root(), 'probe', 'manager.mjs')),
-    import(path.join(root(), 'clinical', 'engine.cjs'))
+    import(path.join(root(), 'probe', 'stream.mjs')),
+    import(path.join(root(), 'clinical', 'engine.cjs')),
+    import(path.join(root(), 'clinical', 'assessment.mjs')),
+    import(path.join(root(), 'imaging', 'model-runtime.mjs'))
   ]);
 }
 
 async function initImaging() {
-  const [{LiveImagingController}, {ProbeManager}, clinical] = await imagingModules();
+  const [{LiveImagingController}, {ProbeManager}, {ProbeStreamBridge}, clinical, assessment, modelRuntime] = await imagingModules();
   probeManager = new ProbeManager();
+  clinicalAssessment = assessment;
+  clinicalEvidenceStore = assessment.createEmptyEvidenceStore();
+  inferenceAdapter = modelRuntime.createInferenceAdapter({});
   liveController = new LiveImagingController({
     anatomyLocator: async () => ({status:'NOT_CONFIGURED', reason:'REAL_ANATOMICAL_LOCALIZER_REQUIRED'}),
-    clinicalEngine: async ({frame, quality, anatomy}) => clinical.assess({imaging:{modality:'US',frame,quality,anatomy}})
+    inference: async input => inferenceAdapter.infer(input),
+    clinicalEngine: async ({frame, sourceFrame, quality, anatomy, inference}) => clinicalAssessment.assessClinicalCase({
+      imaging:{modality:'US', frame, sourceFrame, quality, anatomy, inference},
+      observations: anatomy?.structureId ? [anatomy.structureId] : [],
+      imagingFindings: anatomy?.finding ? [anatomy.finding] : []
+    }, {store:clinicalEvidenceStore, modelValidated:false})
   });
+  probeStream = new ProbeStreamBridge({controller:liveController});
   liveController.onResult(result => { if (win && !win.isDestroyed()) win.webContents.send('imaging:result', result); });
 }
 
@@ -134,7 +150,7 @@ function viewerScript(actions) {
       if (a.type === 'system') clickText(a.id);
       if (a.type === 'view') clickText(a.view);
       if (a.type === 'rotate') { const b=[...document.querySelectorAll('button')].find(e=>/rotate|döndür/i.test(text(e))); if(b)b.click(); }
-      if (a.type === 'explode') { const r=[...document.querySelectorAll('input[type="range"]')].find(e=>/explode|patlat|ayır|ayir/i.test(text(e.parentElement))); if(r){r.value=String(a.value);r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true}));} }
+      if (a.type === 'explode') { const r=[...document.querySelectorAll('input[type="range"]')].find(e=>/explode|patlat|ayır|ayir/i.test(text(e.parentElement))); if(r){r.value=String(a.value);r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true));} }
       if (a.type === 'isolate') clickText(a.value ? 'isolate' : 'show all');
     }
     return true;
@@ -156,7 +172,7 @@ function assistantPanelScript() {
     send.addEventListener('click',run);q.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
     const refreshProbe=async()=>{try{const s=await window.ishAnatomi.probeStatus();box.querySelector('#ish-probe').textContent=s.status+(s.transport?' · '+s.transport:'');}catch(e){box.querySelector('#ish-probe').textContent='ERROR';}};box.querySelector('#ish-probe-refresh').addEventListener('click',refreshProbe);refreshProbe();
     let virtualOn=false;const virtualButton=box.querySelector('#ish-phone-virtual');virtualButton.addEventListener('click',async()=>{virtualOn=!virtualOn;const result=await window.ishAnatomi.setVirtualCamera(virtualOn);virtualButton.textContent=virtualOn?'3D Sanal Kamera Açık':'3D Sanal Kamerayı Aç';virtualButton.classList.toggle('active',virtualOn);box.querySelector('#ish-phone-status').textContent=result.status==='READY'?'Telefon yönelimi 3D anatomi kamerasını sürüyor.':'Sanal kamera: '+result.status;});
-    window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.status||'UNKNOWN';});
+    window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.safety?.status||r.clinical?.status||'UNKNOWN';});
     window.ishAnatomi.onPhoneCameraInfo(info=>{box.querySelector('#ish-phone-status').textContent='Telefonu aynı yerel ağa bağla ve aşağıdaki adresi aç.';box.querySelector('#ish-phone-url').textContent=info.urls?.[0]||'Yerel ağ adresi bulunamadı';});
     window.ishAnatomi.onPhoneCameraFrame(payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
     window.ishAnatomi.onPhoneCameraPose(p=>{box.querySelector('#ish-phone-pose').textContent=[p.alpha,p.beta,p.gamma].map(v=>Number(v).toFixed(1)+'°').join(' / ');});
@@ -187,10 +203,18 @@ app.whenReady().then(async()=>{
   ipcMain.handle('ai:compile',(_e,text)=>compileIntent(text));
   ipcMain.handle('study:card',(_e,text)=>studyCard(text));
   ipcMain.handle('study:quiz',(_e,count,seed)=>createQuiz(count,seed));
-  ipcMain.handle('clinical:assess',(_e,payload)=>{const clinical=require(path.join(root(),'clinical','engine.cjs'));return clinical.assess(payload);});
+  ipcMain.handle('clinical:assess',(_e,payload)=>clinicalAssessment.assessClinicalCase(payload,{store:clinicalEvidenceStore,modelValidated:false}));
   ipcMain.handle('viewer:actions',(_e,actions)=>executeViewerActions(actions));
   ipcMain.handle('probe:list',()=>probeManager?.list?.()??[]);
   ipcMain.handle('probe:status',()=>probeManager?.status?.()??{status:'NOT_CONFIGURED'});
+  ipcMain.handle('probe:connect',async(_e,id)=>{
+    const status=await probeManager.connect(id);
+    const adapter=probeManager.active;
+    if(adapter?.frameSource){probeStream=new (await import(path.join(root(),'probe','stream.mjs'))).ProbeStreamBridge({controller:liveController,frameSource:adapter.frameSource});void probeStream.start({transport:adapter.transport,probeId:adapter.id});}
+    return status;
+  });
+  ipcMain.handle('probe:disconnect',()=>{probeStream?.stop?.();return probeManager?.disconnect?.()??{status:'NOT_CONFIGURED'};});
+  ipcMain.handle('probe:stream-status',()=>probeStream?.status?.()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('imaging:start',(_e,session)=>liveController?.start(session)??{status:'NOT_CONFIGURED'});
   ipcMain.handle('imaging:stop',()=>liveController?.stop()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('imaging:frame',(_e,frame)=>liveController?.push(frame)??{status:'NOT_CONFIGURED'});
