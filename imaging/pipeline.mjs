@@ -43,7 +43,7 @@ export class LiveUltrasoundPipeline {
     const clinical = await this.clinical({frame: processedFrame, sourceFrame: frame, quality, temporal, temporalTracking, calibration, enhancement, anatomy, atlasPoint, inference});
     this.session = updateSession(this.session, validation); this.previous = frame;
     const result = {status: 'ANALYZED', frame: validation, sourceFrame: frame, processedFrame, quality, temporal, temporalTracking, calibration, atlasPoint, overlayAllowed: Boolean(calibration.overlayAllowed && temporalTracking.status === 'STABLE'), enhancement, anatomy, inference, clinical, session: this.session};
-    if (this.evidenceSession) this.evidenceSession.append({type:'FRAME_ANALYZED',timestamp:validation.timestamp,frameId:frame.id??null,structureId:anatomy?.structureId??null,confidence:anatomy?.confidence??null,quality,registration:anatomy?.registration??null,source:frame.source??'ultrasound'});
+    if (this.evidenceSession) this.evidenceSession.append({type:'FRAME_ANALYZED',timestamp:validation.timestamp,frameId:frame.id??null,structureId:anatomy?.structureId??null,confidence:anatomy?.confidence??null,quality,registration:anatomy?.registration??null,source:frame.source??this.session?.source??null,model:inference?.modelId??inference?.model??null,algorithm:inference?.algorithm??null});
     return this.#emit(result);
   }
   #emit(result) { for (const listener of this.listeners) listener(result); return result; }
