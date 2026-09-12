@@ -13,14 +13,10 @@ export function assessClinicalCase(payload = {}, {store = createEmptyEvidenceSto
   const query = payload.query ?? payload.question ?? observations.join(' ');
   const evidence = assessWithEvidence({query, candidates: payload.candidates ?? [], store, observations, measurements, imagingFindings, ontologyCatalog});
   const imaging = payload.imaging ?? {};
-  const qualityAccepted = imaging.quality?.accepted ?? imaging.quality?.status === 'GOOD' || imaging.quality?.status === 'FAIR';
-  const calibrationValid = imaging.calibration?.valid ?? false;
-  const temporalStable = imaging.temporalTracking?.status ? imaging.temporalTracking.status === 'STABLE' : true;
-  const registrationValid = imaging.anatomy?.status === 'READY' || Boolean(imaging.anatomy?.structureId);
-  const safety = validateClinicalOutput({
-    status: evidence.status === 'EVIDENCE_AVAILABLE' ? base.status : evidence.status,
-    findings: base.findings ?? [], evidence: evidence.evidence ?? [], modelValidated,
-    qualityAccepted, calibrationValid, temporalStable, registrationValid
-  });
+  const qualityAccepted = imaging.quality == null ? true : (imaging.quality.accepted ?? ['GOOD','FAIR'].includes(imaging.quality.status));
+  const calibrationValid = imaging.calibration == null ? true : Boolean(imaging.calibration.valid);
+  const temporalStable = imaging.temporalTracking == null ? true : imaging.temporalTracking.status === 'STABLE';
+  const registrationValid = imaging.anatomy == null ? true : (imaging.anatomy.status === 'READY' || Boolean(imaging.anatomy.structureId));
+  const safety = validateClinicalOutput({status: evidence.status === 'EVIDENCE_AVAILABLE' ? base.status : evidence.status,findings: base.findings ?? [],evidence: evidence.evidence ?? [],modelValidated,qualityAccepted,calibrationValid,temporalStable,registrationValid});
   return {...base,evidenceStatus:evidence.status,evidence:evidence.evidence,candidates:evidence.candidates,evidenceGraph:evidence.graph,ontology:evidence.ontology,safety,audit:auditEvent({event:safety.status === 'BLOCKED' ? 'CLINICAL_OUTPUT_BLOCKED' : 'CLINICAL_OUTPUT_REVIEW_REQUIRED'})};
 }
