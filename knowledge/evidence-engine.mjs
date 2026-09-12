@@ -9,10 +9,10 @@ export function chunkDocument(document,{maxChars=1800}={}) {
   const paragraphs=String(document.text).split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
   const out=[]; let buf=''; let n=0;
   for (const p of paragraphs) {
-    if (buf && buf.length+p.length+2>maxChars) { out.push({id:`${document.id}:${n++}`,sourceId:document.id,text:buf,chapter:document.chapter??null,section:document.section??null}); buf=''; }
+    if (buf && buf.length+p.length+2>maxChars) { out.push({id:`${document.id}:${n++}`,sourceId:document.id,text:buf,chapter:document.chapter??null,section:document.section??null,page:document.page??null}); buf=''; }
     buf=buf?`${buf}\n\n${p}`:p;
   }
-  if (buf) out.push({id:`${document.id}:${n}`,sourceId:document.id,text:buf,chapter:document.chapter??null,section:document.section??null});
+  if (buf) out.push({id:`${document.id}:${n}`,sourceId:document.id,text:buf,chapter:document.chapter??null,section:document.section??null,page:document.page??null});
   return out;
 }
 
@@ -27,7 +27,7 @@ export function searchEvidence(query, store,{limit=8}={}) {
   const q=terms(query); if(!q.length) return {status:'INSUFFICIENT_DATA',results:[]};
   const scores=new Map();
   for (const t of q) for (const id of (store.index.get(t)??[])) scores.set(id,(scores.get(id)??0)+1);
-  const results=[...scores.entries()].map(([id,score])=>{const c=store.chunks.get(id); const source=store.sourceMap.get(c.sourceId); return {chunkId:id,score:score/q.length,text:c.text,chapter:c.chapter,section:c.section,source:source??null};})
+  const results=[...scores.entries()].map(([id,score])=>{const c=store.chunks.get(id); const source=store.sourceMap.get(c.sourceId); return {chunkId:id,score:score/q.length,text:c.text,chapter:c.chapter,section:c.section,page:c.page??null,contentHash:c.contentHash??null,source:source??null};})
     .filter(r=>!r.source || canIndex(r.source)).sort((a,b)=>b.score-a.score).slice(0,limit);
   return {status:results.length?'READY':'NO_MATCH',results};
 }
