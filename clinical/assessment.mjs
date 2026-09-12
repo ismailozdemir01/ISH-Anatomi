@@ -11,7 +11,8 @@ export function assessClinicalCase(payload = {}, {store = createEmptyEvidenceSto
   const measurements = payload.measurements ?? payload.imaging?.measurements ?? [];
   const imagingFindings = payload.imaging?.findings ?? payload.imagingFindings ?? [];
   const query = payload.query ?? payload.question ?? observations.join(' ');
-  const evidence = assessWithEvidence({query, candidates: payload.candidates ?? [], store, observations, measurements, imagingFindings, ontologyCatalog});
+  const diagnosisRequested = payload.diagnosis === true || payload.mode === 'DIAGNOSIS';
+  const evidence = assessWithEvidence({query, candidates: payload.candidates ?? [], store, observations, measurements, imagingFindings, ontologyCatalog, requireDiagnosticReference: diagnosisRequested});
   const imaging = payload.imaging ?? {};
   const qualityAccepted = imaging.qualityAccepted != null
     ? Boolean(imaging.qualityAccepted)
@@ -26,5 +27,5 @@ export function assessClinicalCase(payload = {}, {store = createEmptyEvidenceSto
     ? Boolean(imaging.registrationValid)
     : (imaging.anatomy == null ? true : (imaging.anatomy.status === 'READY' || Boolean(imaging.anatomy.structureId)));
   const safety = validateClinicalOutput({status: evidence.status === 'EVIDENCE_AVAILABLE' ? base.status : evidence.status,findings: base.findings ?? [],evidence: evidence.evidence ?? [],modelValidated,qualityAccepted,calibrationValid,temporalStable,registrationValid});
-  return {...base,evidenceStatus:evidence.status,evidence:evidence.evidence,candidates:evidence.candidates,evidenceGraph:evidence.graph,ontology:evidence.ontology,safety,audit:auditEvent({event:safety.status === 'BLOCKED' ? 'CLINICAL_OUTPUT_BLOCKED' : 'CLINICAL_OUTPUT_REVIEW_REQUIRED'})};
+  return {...base,evidenceStatus:evidence.status,evidence:evidence.evidence,candidates:evidence.candidates,diagnosticEvidence:evidence.diagnosticEvidence ?? [],evidenceGraph:evidence.graph,ontology:evidence.ontology,safety,audit:auditEvent({event:safety.status === 'BLOCKED' ? 'CLINICAL_OUTPUT_BLOCKED' : 'CLINICAL_OUTPUT_REVIEW_REQUIRED'})};
 }
