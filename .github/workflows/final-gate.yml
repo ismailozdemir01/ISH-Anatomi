@@ -1,9 +1,9 @@
 name: ISH-Anatomi Final Gate
 
 on:
-  workflow_run:
-    workflows: ["ISH-Anatomi CI"]
-    types: [completed]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,25 +13,13 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
-  gate:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: win
-            artifact: ish-anatomi-windows-final
-          - os: ubuntu-latest
-            target: linux
-            artifact: ish-anatomi-linux-final
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+  verify:
+    name: Verify runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout tested commit
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -43,29 +31,107 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install root dependencies
-        run: npm install
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
 
-      - name: Re-run JavaScript tests on release candidate
+      - name: JavaScript syntax and tests
         run: npm test
 
-      - name: Re-run Python clinical tests on release candidate
+      - name: Python clinical tests
         run: npm run test:python
 
-      - name: Prepare and validate Human Atlas
+      - name: Architecture audit
+        run: npm run audit:architecture
+
+      - name: Integration audit
+        run: npm run audit:integration
+
+  atlas:
+    name: Verify and build Human Atlas
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Bootstrap pinned Human Atlas
+        run: npm run atlas:bootstrap
+
+      - name: Install Human Atlas dependencies
+        run: npm run atlas:install
+
+      - name: Validate Human Atlas
+        run: npm run atlas:check
+
+      - name: Build Human Atlas
+        run: npm run atlas:build
+
+      - name: Verify built Atlas output
+        run: test -d vendor/human-atlas/dist && test -n "$(find vendor/human-atlas/dist -type f -print -quit)"
+
+  desktop:
+    name: Build ${{ matrix.os }} desktop package
+    needs: atlas
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            artifact: ish-anatomi-windows-final
+          - os: ubuntu-latest
+            target: linux
+            artifact: ish-anatomi-linux-final
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Prepare pinned Human Atlas and runtime
         run: npm run desktop:prepare
 
-      - name: Build final desktop package
-        run: npx electron-builder --${{ matrix.target }} --publish never
+      - name: Verify desktop entrypoint
+        run: node --check desktop/main.cjs
 
-      - name: Verify package output exists
+      - name: Build Windows NSIS
+        if: matrix.target == 'win'
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Build Linux AppImage and deb
+        if: matrix.target == 'linux'
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Verify package output
         shell: bash
         run: |
           test -d dist
           if [ "${{ matrix.target }}" = "win" ]; then test -n "$(find dist -maxdepth 1 -type f -name '*.exe' -print -quit)"; fi
           if [ "${{ matrix.target }}" = "linux" ]; then test -n "$(find dist -maxdepth 1 -type f \( -name '*.AppImage' -o -name '*.deb' \) -print -quit)"; fi
 
-      - name: Upload final package artifact
+      - name: Upload final package
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -74,3 +140,4 @@ jobs:
             dist/*.AppImage
             dist/*.deb
           if-no-files-found: error
+          retention-days: 14
