@@ -21,9 +21,7 @@ export class ProbeManager {
   }
 
   register(adapter) {
-    if (!adapter?.id || typeof adapter.id !== 'string' || !SUPPORTED_TRANSPORTS.has(adapter.transport)) {
-      throw new Error('INVALID_PROBE_ADAPTER');
-    }
+    if (!adapter?.id || typeof adapter.id !== 'string' || !SUPPORTED_TRANSPORTS.has(adapter.transport)) throw new Error('INVALID_PROBE_ADAPTER');
     requireFunction(adapter, 'connect');
     requireFunction(adapter, 'disconnect');
     if (adapter.telemetry != null) requireFunction(adapter, 'telemetry');
@@ -38,12 +36,7 @@ export class ProbeManager {
   }
 
   list() {
-    return [...this.adapters.values()].map(a => ({
-      id: a.id,
-      name: a.name ?? a.id,
-      transport: a.transport,
-      capabilities: [...a.capabilities]
-    }));
+    return [...this.adapters.values()].map(a => ({id: a.id, name: a.name ?? a.id, transport: a.transport, capabilities: [...a.capabilities]}));
   }
 
   async connect(id) {
@@ -53,7 +46,7 @@ export class ProbeManager {
     if (this.active) await this.disconnect();
     try {
       await adapter.connect();
-      this.active = adapter;
+      this.active = {...adapter, connectedAt: this.clock()};
       this.lastError = null;
       return this.status();
     } catch (error) {
@@ -77,7 +70,9 @@ export class ProbeManager {
   }
 
   status() {
-    if (!this.active) return {status: NOT_CONNECTED, error: this.lastError};
+    if (!this.active) {
+      return this.lastError ? {status: NOT_CONNECTED, error: this.lastError} : {status: NOT_CONNECTED};
+    }
     let telemetry = null;
     try {
       telemetry = this.active.telemetry?.() ?? null;
@@ -91,8 +86,8 @@ export class ProbeManager {
       transport: this.active.transport,
       capabilities: [...this.active.capabilities],
       telemetry,
-      connectedAt: this.active.connectedAt ?? null,
-      error: this.lastError
+      connectedAt: this.active.connectedAt,
+      ...(this.lastError ? {error: this.lastError} : {})
     };
   }
 }
