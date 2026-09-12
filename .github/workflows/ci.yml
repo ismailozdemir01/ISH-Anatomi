@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +24,7 @@ jobs:
           node --version | tee .ci/node-version.txt
           npm --version | tee .ci/npm-version.txt
           python --version | tee .ci/python-version.txt
+          uname -a | tee .ci/runner.txt
       - name: Install desktop dependencies
         run: npm install --ignore-scripts --no-audit --no-fund 2>&1 | tee .ci/npm-install.log
       - name: Run isolated validation loop
