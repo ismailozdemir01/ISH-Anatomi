@@ -7,6 +7,7 @@ const SCAN_DIRS = ['desktop', 'local-ai', 'clinical', 'imaging', 'probe', 'knowl
 const EXTENSIONS = new Set(['.mjs', '.cjs']);
 const TEST_RE = /(?:^|[\\/])[^\\/]+\.test\.(?:mjs|cjs)$/;
 const IMPORT_RE = /(?:import\\s+(?:[^'";]+?\\s+from\\s+)?|import\\s*\\(|require\\s*\()\\s*['"]([^'"]+)['"]/g;
+const DYNAMIC_ROOT_RE = /path\.join\\(root\\(\\),\\s*'([^']+)'\\s*,\\s*'([^']+)'\\)/g;
 
 async function walk(dir) {
   const out = [];
@@ -46,10 +47,13 @@ for (const file of production) {
     if (target.broken) broken.push(target.broken);
     else if (graph.has(target)) graph.get(file).add(target);
   }
+  for (const match of text.matchAll(DYNAMIC_ROOT_RE)) {
+    const target = path.join(ROOT, match[1], match[2]);
+    if (graph.has(target)) graph.get(file).add(target);
+    else broken.push(`${relativeId(file)} -> ${match[1]}/${match[2]}`);
+  }
 }
 
-// Electron's dynamic imports are string-built from known module names in main.cjs.
-// Add those runtime roots explicitly so the audit models the actual application entry path.
 const rootPaths = [
   path.join(ROOT, 'desktop', 'main.cjs'),
   path.join(ROOT, 'desktop', 'preload.cjs')
@@ -69,15 +73,15 @@ const report = {
   status: broken.length || orphan.length ? 'FAIL' : 'PASS',
   productionModules: production.length,
   reachableModules: reachable.size,
-  brokenImports: broken.sort(),
+  brokenImports: [...new Set(broken)].sort(),
   disconnectedModules: orphan.sort()
 };
 
 console.log(JSON.stringify(report, null, 2));
 if (report.status !== 'PASS') {
   console.error('ARCHITECTURE_AUDIT_FAILED');
-  if (broken.length) console.error(`Broken imports: ${broken.length}`);
-  if (orphan.length) console.error(`Disconnected production modules: ${orphan.length}`);
+  if (report.brokenImports.length) console.error(`Broken imports: ${report.brokenImports.length}`);
+  if (report.disconnectedModules.length) console.error(`Disconnected production modules: ${report.disconnectedModules.length}`);
   process.exit(1);
 }
 console.log('ARCHITECTURE_AUDIT_PASSED');
