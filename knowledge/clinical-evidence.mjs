@@ -6,6 +6,7 @@ import {REFERENCE_DOMAIN} from './medical-reference-library.mjs';
 export const DECISION_STATUS=Object.freeze({INSUFFICIENT_DATA:'INSUFFICIENT_DATA',NO_EVIDENCE:'NO_EVIDENCE',EVIDENCE_AVAILABLE:'EVIDENCE_AVAILABLE',DIAGNOSTIC_REFERENCE_REQUIRED:'DIAGNOSTIC_REFERENCE_REQUIRED'});
 
 const withDomain=e=>({...e,domain:e.source?.domain??null});
+const evidenceRecord=e=>({chunkId:e.chunkId,source:e.source?.title??null,provider:e.source?.provider??null,domain:e.domain,chapter:e.chapter,section:e.section,page:e.page??null,score:e.score,text:e.text,sourceContentHash:e.source?.contentHash??null,chunkContentHash:e.contentHash??null,sourceUri:e.source?.uri??null});
 
 export function assessWithEvidence({query='',candidates=[],store,observations=[],measurements=[],imagingFindings=[],ontologyCatalog=[],requireDiagnosticReference=false}={}) {
   const ontology=mapCase({observations,measurements,imagingFindings},ontologyCatalog);
@@ -15,15 +16,15 @@ export function assessWithEvidence({query='',candidates=[],store,observations=[]
   const results=evidence.results.map(withDomain);
   const diagnosticResults=results.filter(e=>e.domain===REFERENCE_DOMAIN.DIAGNOSIS);
   if(requireDiagnosticReference && !diagnosticResults.length) {
-    return {status:DECISION_STATUS.DIAGNOSTIC_REFERENCE_REQUIRED,candidates:[],evidence:results,diagnosticEvidence:[],graph:buildEvidenceGraph({observations,measurements,imagingFindings,evidence:results}),ontology};
+    return {status:DECISION_STATUS.DIAGNOSTIC_REFERENCE_REQUIRED,candidates:[],evidence:results.map(evidenceRecord),diagnosticEvidence:[],graph:buildEvidenceGraph({observations,measurements,imagingFindings,evidence:results}),ontology};
   }
   const graph=buildEvidenceGraph({observations,measurements,imagingFindings,evidence:results});
   const ranked=evaluateCandidates(candidates,graph).candidates;
   return {
     status:DECISION_STATUS.EVIDENCE_AVAILABLE,
     candidates:ranked.length?ranked:rankDiagnosticCandidates(candidates,diagnosticResults.length?diagnosticResults:results),
-    evidence:results.map(e=>({chunkId:e.chunkId,source:e.source?.title??null,provider:e.source?.provider??null,domain:e.domain,chapter:e.chapter,section:e.section,score:e.score,text:e.text})),
-    diagnosticEvidence:diagnosticResults.map(e=>({chunkId:e.chunkId,source:e.source?.title??null,provider:e.source?.provider??null,domain:e.domain,chapter:e.chapter,section:e.section,score:e.score,text:e.text})),
+    evidence:results.map(evidenceRecord),
+    diagnosticEvidence:diagnosticResults.map(evidenceRecord),
     graph,
     ontology
   };
