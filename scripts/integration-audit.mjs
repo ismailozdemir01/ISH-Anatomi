@@ -23,7 +23,7 @@ const requiredModules=[
   'imaging/anatomy-registration.mjs','imaging/temporal.mjs','imaging/model-runtime.mjs','imaging/interop.mjs',
   'imaging/calibration.mjs','imaging/coordinate-space.mjs','imaging/evidence-session.mjs',
   'probe/manager.mjs','probe/stream.mjs',
-  'knowledge/ontology.mjs','knowledge/evidence-engine.mjs','knowledge/clinical-evidence.mjs','knowledge/evidence-graph.mjs','knowledge/source-ingestion.mjs','knowledge/source-registry.mjs',
+  'knowledge/ontology.mjs','knowledge/evidence-engine.mjs','knowledge/clinical-evidence.mjs','knowledge/evidence-graph.mjs','knowledge/source-ingestion.mjs','knowledge/source-registry.mjs','knowledge/medical-reference-library.mjs',
   'camera/local-phone-camera.mjs','camera/frame-analysis.mjs','camera/pose-filter.mjs','camera/virtual-camera.mjs'
 ];
 const missingModules=[];
