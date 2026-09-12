@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
@@ -36,11 +40,36 @@ jobs:
           name: ish-anatomi-validation-report
           path: .ci/
           if-no-files-found: warn
+
+  atlas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Initialize Atlas diagnostics
+        run: |
+          mkdir -p .ci-atlas
+          node --version | tee .ci-atlas/node-version.txt
+          npm --version | tee .ci-atlas/npm-version.txt
+      - name: Install root dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Bootstrap pinned Human Atlas
         run: npm run atlas:bootstrap
-      - name: Install Human Atlas
+      - name: Install Human Atlas dependencies
         run: npm run atlas:install
       - name: Validate Human Atlas
         run: npm run atlas:check
       - name: Build Human Atlas
         run: npm run atlas:build
+      - name: Verify built Atlas output
+        run: test -d vendor/human-atlas/dist && test -n "$(find vendor/human-atlas/dist -type f -print -quit)"
+      - name: Upload Atlas diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ish-anatomi-atlas-report
+          path: .ci-atlas/
+          if-no-files-found: warn
