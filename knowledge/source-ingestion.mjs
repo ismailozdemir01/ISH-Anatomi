@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {canIndex} from './source-registry.mjs';
+import {REFERENCE_DOMAIN} from './medical-reference-library.mjs';
 
 export const LICENSE_STATUS=Object.freeze({OPEN:'OPEN',LICENSED:'LICENSED',RESTRICTED:'RESTRICTED',UNKNOWN:'UNKNOWN'});
 export const DOCUMENT_TYPES=Object.freeze({TEXTBOOK:'TEXTBOOK',GUIDELINE:'GUIDELINE',ARTICLE:'ARTICLE',USER_LICENSED:'USER_LICENSED'});
@@ -11,6 +12,7 @@ export function validateDocument(document={}) {
   for(const k of required) if(!clean(document[k])) return {valid:false,reason:`${k.toUpperCase()}_REQUIRED`};
   if(!Object.values(LICENSE_STATUS).includes(document.licenseStatus)) return {valid:false,reason:'INVALID_LICENSE_STATUS'};
   if(!Object.values(DOCUMENT_TYPES).includes(document.documentType)) return {valid:false,reason:'INVALID_DOCUMENT_TYPE'};
+  if(document.domain!=null && !Object.values(REFERENCE_DOMAIN).includes(document.domain)) return {valid:false,reason:'INVALID_REFERENCE_DOMAIN'};
   if(!clean(document.text)) return {valid:false,reason:'EMPTY_CONTENT'};
   if(document.licenseStatus==='UNKNOWN' || document.licenseStatus==='RESTRICTED') return {valid:false,reason:'RIGHTS_NOT_CLEAR'};
   return {valid:true};
@@ -24,7 +26,7 @@ export function ingestDocument(document={}, {maxChars=1800}={}) {
   const flush=()=>{if(!buffer)return; chunks.push({id:`${document.id}:${hash.slice(0,16)}:${index++}`,sourceId:document.id,text:buffer,chapter:document.chapter??null,section:document.section??null,page:document.page??null,contentHash:contentHash(buffer)});buffer='';};
   for(const p of paragraphs){if(buffer&&buffer.length+p.length+2>maxChars)flush();buffer=buffer?`${buffer}\n\n${p}`:p;}
   flush();
-  const source={id:document.id,title:document.title,provider:document.provider,type:document.documentType,status:'ACTIVE',contentAvailable:true,edition:document.edition??null,year:document.year??null,language:document.language,license:document.licenseStatus,rights:document.rights??null,uri:document.uri??null,contentHash:hash,ingestedAt:document.ingestedAt??new Date().toISOString()};
+  const source={id:document.id,title:document.title,provider:document.provider,type:document.documentType,status:'ACTIVE',contentAvailable:true,edition:document.edition??null,year:document.year??null,language:document.language,license:document.licenseStatus,licenseStatus:document.licenseStatus,rights:document.rights??null,uri:document.uri??null,contentHash:hash,domain:document.domain??null,role:document.role??null,ingestedAt:document.ingestedAt??new Date().toISOString()};
   if(!canIndex(source)) return {status:'REJECTED',reason:'SOURCE_REGISTRY_REJECTED'};
   return {status:'INGESTED',source,chunks};
 }
