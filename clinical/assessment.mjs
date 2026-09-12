@@ -26,6 +26,6 @@ export function assessClinicalCase(payload = {}, {store = createEmptyEvidenceSto
   const registrationValid = imaging.registrationValid != null
     ? Boolean(imaging.registrationValid)
     : (imaging.anatomy == null ? true : (imaging.anatomy.status === 'READY' || Boolean(imaging.anatomy.structureId)));
-  const safety = validateClinicalOutput({status: evidence.status === 'EVIDENCE_AVAILABLE' ? base.status : evidence.status,findings: base.findings ?? [],evidence: evidence.evidence ?? [],modelValidated,qualityAccepted,calibrationValid,temporalStable,registrationValid});
+  const safety = validateClinicalOutput({status: evidence.status === 'EVIDENCE_AVAILABLE' ? base.status : evidence.status,findings: base.findings ?? [],evidence: evidence.evidence ?? [],diagnosticEvidence: evidence.diagnosticEvidence ?? [],modelValidated,qualityAccepted,calibrationValid,temporalStable,registrationValid,diagnosisRequested});
   return {...base,evidenceStatus:evidence.status,evidence:evidence.evidence,candidates:evidence.candidates,diagnosticEvidence:evidence.diagnosticEvidence ?? [],evidenceGraph:evidence.graph,ontology:evidence.ontology,safety,audit:auditEvent({event:safety.status === 'BLOCKED' ? 'CLINICAL_OUTPUT_BLOCKED' : 'CLINICAL_OUTPUT_REVIEW_REQUIRED'})};
 }
