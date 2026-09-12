@@ -1,6 +1,7 @@
 import {LiveUltrasoundPipeline} from './pipeline.mjs';
 import {assessFrameQuality} from './quality.mjs';
 import {createRegistrationState, updateRegistration, registrationOverlay} from './anatomy-registration.mjs';
+import {mapUltrasoundFinding, atlasOverlayGate} from './atlas-mapping.mjs';
 
 export class LiveImagingController {
   constructor({anatomyLocator, clinicalEngine, temporalWindow = 30, calibration = null, atlasCatalog = []} = {}) {
@@ -29,7 +30,15 @@ export class LiveImagingController {
     if (result?.anatomy?.structureId) {
       this.registration = updateRegistration(this.registration, result.anatomy, result?.frame?.timestamp ?? Date.now());
     }
-    const overlay = registrationOverlay(this.registration, result?.frame?.timestamp ?? Date.now());
-    return {...result, registration:this.registration, registrationOverlay:overlay};
+    const registrationOverlayResult = registrationOverlay(this.registration, result?.frame?.timestamp ?? Date.now());
+    const atlasMapping = result?.anatomy?.structureId
+      ? mapUltrasoundFinding({structureId:result.anatomy.structureId,confidence:result.anatomy.confidence,transform:result.anatomy.transform,plane:result.anatomy.plane}, this.atlasCatalog)
+      : {status:'INVALID',reason:'STRUCTURE_ID_REQUIRED'};
+    const atlasOverlay = atlasOverlayGate(atlasMapping, {
+      registrationStatus:this.registration.status,
+      calibrated:Boolean(result?.calibration?.overlayAllowed),
+      qualityStatus:result?.quality?.status ?? 'UNKNOWN'
+    });
+    return {...result, registration:this.registration, registrationOverlay:registrationOverlayResult, atlasMapping, atlasOverlay};
   }
 }
