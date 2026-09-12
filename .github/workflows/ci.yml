@@ -20,10 +20,15 @@ jobs:
           python-version: '3.12'
       - name: Install desktop dependencies
         run: npm install
-      - name: Test local AI and clinical safety
-        run: npm test
-      - name: Test Python clinical core
-        run: npm run test:python
+      - name: Run isolated validation loop
+        run: node scripts/ci-validation.mjs
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ish-anatomi-validation-report
+          path: .ci/validation.json
+          if-no-files-found: warn
       - name: Bootstrap pinned Human Atlas
         run: npm run atlas:bootstrap
       - name: Install Human Atlas
