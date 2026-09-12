@@ -18,8 +18,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Initialize CI diagnostics
+        run: |
+          mkdir -p .ci
+          node --version | tee .ci/node-version.txt
+          npm --version | tee .ci/npm-version.txt
+          python --version | tee .ci/python-version.txt
       - name: Install desktop dependencies
-        run: npm install
+        run: npm install --ignore-scripts --no-audit --no-fund 2>&1 | tee .ci/npm-install.log
       - name: Run isolated validation loop
         run: node scripts/ci-validation.mjs
       - name: Upload validation report
@@ -27,7 +33,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ish-anatomi-validation-report
-          path: .ci/validation.json
+          path: .ci/
           if-no-files-found: warn
       - name: Bootstrap pinned Human Atlas
         run: npm run atlas:bootstrap
