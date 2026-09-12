@@ -1,11 +1,11 @@
 export class EvidenceSession {
-  constructor({id=crypto.randomUUID(),probeId=null,startedAt=Date.now()}={}){this.id=id;this.probeId=probeId;this.startedAt=startedAt;this.events=[];this.closedAt=null;}
-  append({type,frameId=null,timestamp,structureId=null,confidence=null,quality=null,registration=null,source=null}={}){
+  constructor({id=crypto.randomUUID(),probeId=null,startedAt=Date.now(),source=null}={}){this.id=id;this.probeId=probeId;this.source=source;this.startedAt=startedAt;this.events=[];this.closedAt=null;}
+  append({type,frameId=null,timestamp,structureId=null,confidence=null,quality=null,registration=null,source=null,model=null,algorithm=null}={}){
     if(!type||!Number.isFinite(Number(timestamp)))throw new Error('INVALID_EVIDENCE_EVENT');
-    const event=Object.freeze({sequence:this.events.length,timestamp:Number(timestamp),type,frameId,structureId,confidence:confidence==null?null:Number(confidence),quality:quality??null,registration:registration??null,source:source??null});
+    const event=Object.freeze({sequence:this.events.length,timestamp:Number(timestamp),type,frameId,structureId,confidence:confidence==null?null:Number(confidence),quality:quality??null,registration:registration??null,source:source??this.source??null,model:model??null,algorithm:algorithm??null});
     this.events.push(event); return event;
   }
   close(timestamp=Date.now()){if(!Number.isFinite(Number(timestamp))||Number(timestamp)<this.startedAt)throw new Error('INVALID_CLOSE_TIME');this.closedAt=Number(timestamp);return this.summary();}
-  summary(){return {id:this.id,probeId:this.probeId,startedAt:this.startedAt,closedAt:this.closedAt,eventCount:this.events.length,firstFrameId:this.events.find(e=>e.frameId)?.frameId??null,lastFrameId:[...this.events].reverse().find(e=>e.frameId)?.frameId??null};}
-  export(){return Object.freeze({schema:'ish-anatomi.evidence.v1',session:this.summary(),events:this.events.map(e=>({...e}))});}
+  summary(){return {id:this.id,probeId:this.probeId,source:this.source,startedAt:this.startedAt,closedAt:this.closedAt,eventCount:this.events.length,firstFrameId:this.events.find(e=>e.frameId)?.frameId??null,lastFrameId:[...this.events].reverse().find(e=>e.frameId)?.frameId??null};}
+  export(){return Object.freeze({schema:'ish-anatomi.evidence.v2',session:this.summary(),events:this.events.map(e=>({...e}))});}
 }
