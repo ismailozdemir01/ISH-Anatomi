@@ -1,4 +1,5 @@
 import {LiveImagingController} from '../imaging/live-controller.mjs';
+import {validateRealtimeMetadata} from '../imaging/interop.mjs';
 
 /**
  * Transport-neutral real-time probe bridge.
@@ -45,6 +46,11 @@ export class ProbeStreamBridge {
       for await (const frame of this.frameSource) {
         if (!this.running) break;
         this.framesSeen += 1;
+        const metadata = validateRealtimeMetadata(frame?.metadata ?? frame ?? {});
+        if (metadata.status !== 'READY') {
+          this.framesRejected += 1;
+          continue;
+        }
         const result = await this.controller.push(frame);
         if (result?.status === 'ANALYZED') this.framesAnalyzed += 1;
         else this.framesRejected += 1;
