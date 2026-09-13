@@ -13,20 +13,72 @@ concurrency:
   group: ish-anatomi-autonomous-loop
   cancel-in-progress: false
 
+env:
+  MAX_WAIT_MINUTES: 90
+
 jobs:
   trigger-final-gate:
     name: Run validation pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 100
     steps:
-      - name: Trigger Final Gate
+      - name: Capture current Final Gate run
+        id: before
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run final-gate.yml --repo "${{ github.repository }}" --ref main
+          echo "run_id=$(gh run list --repo "${{ github.repository }}" --workflow final-gate.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId // 0')" >> "$GITHUB_OUTPUT"
 
-      - name: Explain loop behavior
+      - name: Trigger Final Gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run final-gate.yml --repo "${{ github.repository }}" --ref main
+
+      - name: Wait for Final Gate and enforce result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE_RUN_ID: ${{ steps.before.outputs.run_id }}
         run: |
-          echo 'Final Gate is the authoritative sequential pipeline.'
-          echo 'PASS advances automatically through Verify -> Atlas -> Windows/Linux -> Package Validation.'
-          echo 'FAIL remains visible in Actions for root-cause analysis; this workflow does not fabricate or silently modify source code.'
+          deadline=$(( $(date +%s) + MAX_WAIT_MINUTES * 60 ))
+          run_id=0
+          while [ "$run_id" = 0 ] && [ "$(date +%s)" -lt "$deadline" ]; do
+            run_id=$(gh run list --repo "${{ github.repository }}" --workflow final-gate.yml --branch main --limit 10 --json databaseId,status,createdAt --jq --argjson before "${BEFORE_RUN_ID:-0}" '[.[] | select(.databaseId > $before) | .databaseId] | .[0] // 0')
+            [ "$run_id" != 0 ] || sleep 15
+          done
+          test "$run_id" != 0
+          echo "Final Gate run: $run_id"
+
+          while true; do
+            status=$(gh run view "$run_id" --repo "${{ github.repository }}" --json status --jq '.status')
+            conclusion=$(gh run view "$run_id" --repo "${{ github.repository }}" --json conclusion --jq '.conclusion')
+            echo "status=$status conclusion=$conclusion"
+            [ "$status" = "completed" ] && break
+            [ "$(date +%s)" -lt "$deadline" ] || { echo 'Final Gate timeout'; exit 1; }
+            sleep 30
+          done
+
+          if [ "$conclusion" = "success" ]; then
+            echo 'PASS: Verify -> Atlas -> Windows/Linux -> Package Validation completed.'
+            exit 0
+          fi
+
+          echo 'FAIL: Final Gate did not pass.'
+          echo 'Collecting failure diagnostics; source code is never silently modified.'
+          gh run view "$run_id" --repo "${{ github.repository }}" --json jobs --jq '.jobs[] | [.name,.status,.conclusion] | @tsv' || true
+          gh run view "$run_id" --repo "${{ github.repository }}" --log-failed > failure-log.txt 2>&1 || true
+          grep -Ei 'error|failed|failure|runner|quota|limit|rate|permission|timeout' failure-log.txt | tail -200 || true
+          exit 1
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-loop-failure-${{ github.run_id }}
+          path: failure-log.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+# Automatic source-code repair is intentionally not performed here: a failed test
+# must be diagnosed from real logs and fixed through a reviewed commit, never by
+# an uncontrolled self-modifying workflow. Once the commit lands, the schedule
+# automatically starts the same loop again.
