@@ -1,0 +1,32 @@
+name: ISH-Anatomi Autonomous Loop
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ish-anatomi-autonomous-loop
+  cancel-in-progress: false
+
+jobs:
+  trigger-final-gate:
+    name: Run validation pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger Final Gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run final-gate.yml --repo "${{ github.repository }}" --ref main
+
+      - name: Explain loop behavior
+        run: |
+          echo 'Final Gate is the authoritative sequential pipeline.'
+          echo 'PASS advances automatically through Verify -> Atlas -> Windows/Linux -> Package Validation.'
+          echo 'FAIL remains visible in Actions for root-cause analysis; this workflow does not fabricate or silently modify source code.'
