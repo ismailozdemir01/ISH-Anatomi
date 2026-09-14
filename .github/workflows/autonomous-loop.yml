@@ -2,8 +2,6 @@ name: ISH-Anatomi Autonomous Loop
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/15 * * * *'
 
 permissions:
   contents: read
@@ -78,7 +76,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-# Automatic source-code repair is intentionally not performed here: a failed test
-# must be diagnosed from real logs and fixed through a reviewed commit, never by
-# an uncontrolled self-modifying workflow. Once the commit lands, the schedule
-# automatically starts the same loop again.
+# The loop is intentionally manual-trigger only. Automatic source-code repair is
+# not performed: failures must be diagnosed from real logs and fixed through a
+# reviewed commit.
