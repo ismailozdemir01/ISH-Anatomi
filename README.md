@@ -1,6 +1,6 @@
 # ISH-Anatomi
 
-**GPT-6 Astra — İnteraktif İnsan Anatomisi Modülü**
+**İnteraktif İnsan Anatomisi Modülü**
 
 ISH-Anatomi; 2.234 gerçek BodyParts3D anatomik yapısını masaüstünde etkileşimli 3D olarak sunan, arama, sistem katmanları, seçim, izolasyon, exploded view, eğitim, yerel AI ve **gerçek zamanlı ultrason görüntüleme entegrasyon çekirdeğini** tek uygulamada birleştiren anatomik platformdur.
 
