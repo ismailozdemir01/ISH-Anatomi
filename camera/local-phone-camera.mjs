@@ -3,6 +3,8 @@ import https from 'node:https';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_POSE_BYTES = 16 * 1024;
@@ -27,6 +29,22 @@ function readBody(req, limit) {
   });
 }
 function send(res,status,body,type='application/json; charset=utf-8'){res.writeHead(status,{'content-type':type,'cache-control':'no-store'});res.end(typeof body==='string'?body:JSON.stringify(body));}
+
+function ensureTlsMaterial(certPath, keyPath, host) {
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) return true;
+  try {
+    fs.mkdirSync(path.dirname(certPath), {recursive:true});
+    fs.mkdirSync(path.dirname(keyPath), {recursive:true});
+    try { execFileSync('mkcert',['-install'],{stdio:'ignore'}); } catch {}
+    const names=['localhost','127.0.0.1','::1'];
+    for (const interfaces of Object.values(os.networkInterfaces())) {
+      for (const entry of interfaces ?? []) if (entry?.family === 'IPv4' && !entry.internal) names.push(entry.address);
+    }
+    execFileSync('mkcert',['-cert-file',certPath,'-key-file',keyPath,...[...new Set(names)]],{stdio:'ignore'});
+    return fs.existsSync(certPath) && fs.existsSync(keyPath);
+  } catch { return false; }
+}
+
 function page(secret,fps){
   const html = '<!doctype html><html lang="tr"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ISH-Anatomi · Telefon Kamerası</title><style>body{font:16px system-ui;margin:0;padding:24px;background:#0b1020;color:#fff}button{padding:14px 18px;border:0;border-radius:12px;margin:6px 0;font-weight:700}video{width:100%;max-width:720px;border-radius:16px;background:#000}#s{color:#cbd5e1;line-height:1.5}</style><h2>ISH-Anatomi · Telefon Kamerası</h2><p>Telefon kamerası doğrudan yerel bilgisayara gönderilir. Bulut/API yok.</p><button id="start">Kamerayı başlat</button><button id="motion">Yönelim iznini ver</button><button id="stop" disabled>Durdur</button><p id="s">Hazır · hedef __FPS__ FPS</p><video id="v" autoplay playsinline muted></video><canvas id="c" hidden></canvas><script>
 const secret="__SECRET__", targetFps=__FPS__, statusEl=document.querySelector('#s'), video=document.querySelector('#v'), canvas=document.querySelector('#c'), stopButton=document.querySelector('#stop');
@@ -56,7 +74,7 @@ export class LocalPhoneCameraServer{
     if(this.server)return this.info();
     this.server=http.createServer((req,res)=>this.handler(req,res));
     await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(this.port,this.host,resolve);});
-    try{if(fs.existsSync(this.certPath)&&fs.existsSync(this.keyPath)){const tls={cert:fs.readFileSync(this.certPath),key:fs.readFileSync(this.keyPath)};this.httpsServer=https.createServer(tls,(req,res)=>this.handler(req,res));await new Promise((resolve,reject)=>{this.httpsServer.once('error',reject);this.httpsServer.listen(this.httpsPort,this.host,resolve);});}}catch{}
+    try{if(ensureTlsMaterial(this.certPath,this.keyPath,this.host)){const tls={cert:fs.readFileSync(this.certPath),key:fs.readFileSync(this.keyPath)};this.httpsServer=https.createServer(tls,(req,res)=>this.handler(req,res));await new Promise((resolve,reject)=>{this.httpsServer.once('error',reject);this.httpsServer.listen(this.httpsPort,this.host,resolve);});}}catch{}
     return this.info();
   }
   info(){
