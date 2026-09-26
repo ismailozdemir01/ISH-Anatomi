@@ -149,7 +149,7 @@ async function initPhoneCamera() {
 
 
 function localMediaHubScript() {
-  return \`(() => {
+  return `(() => {
     const root=document.getElementById('ish-local-assistant');
     if(!root || document.getElementById('ish-local-media')) return;
     const section=document.createElement('section');
@@ -203,7 +203,7 @@ function localMediaHubScript() {
     section.querySelector('#ish-usb-stop').onclick=stopLocal;
     if(navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange',()=>void scan());
     void scan();
-  })()\`;
+  })()`;
 }
 
 async function localModules() {
