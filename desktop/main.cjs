@@ -152,8 +152,8 @@ async function initPhoneCamera() {
         liveResult = {status:'ERROR',reason:error.message};
       }
       if (liveResult?.atlasMapping?.status === 'MAPPED' && liveResult.atlasMapping.structureId && liveResult.atlasMapping.structureId !== lastAtlasStructureId) {
-        globalThis.__ishLastAtlasStructure = liveResult.atlasMapping.structureId;
-        void executeViewerActions([{type:'search',query:liveResult.atlasMapping.structureId}]);
+        lastAtlasStructureId = liveResult.atlasMapping.structureId;
+        void executeViewerActions([{type:'search',query:liveResult.anatomy?.name || liveResult.atlasMapping.structureId}]);
       }
       if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion,liveResult});
     },
