@@ -237,6 +237,46 @@ function assistantPanelScript() {
   })()`;
 }
 
+function fallbackDeviceHubScript() {
+  return `(() => {
+    if (document.getElementById('ish-device-hub-fallback')) return true;
+    const hub = document.createElement('aside');
+    hub.id = 'ish-device-hub-fallback';
+    hub.style.cssText = 'position:fixed;right:18px;top:18px;width:300px;z-index:2147483647;background:#0c1220;color:#fff;border:2px solid #60a5fa;border-radius:14px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.5);font:14px system-ui,sans-serif';
+    hub.innerHTML = '<strong style="display:block;font-size:16px;margin-bottom:10px">🔌 CİHAZLAR</strong><button id="ish-fallback-camera" style="width:100%;padding:10px;margin:4px 0;border:0;border-radius:9px;background:#334155;color:#fff;cursor:pointer">📷 Kamera Ara</button><button id="ish-fallback-bt" style="width:100%;padding:10px;margin:4px 0;border:0;border-radius:9px;background:#334155;color:#fff;cursor:pointer">🔵 Bluetooth Ara</button><div id="ish-fallback-status" style="margin-top:8px;color:#cbd5e1;font-size:12px">Cihaz bağlantı merkezi hazır.</div>';
+    document.body.appendChild(hub);
+    hub.querySelector('#ish-fallback-camera').onclick = async () => {
+      const s = hub.querySelector('#ish-fallback-status');
+      try {
+        const info = await window.ishAnatomi.phoneCameraSearch();
+        const url = (info?.httpsUrls || info?.urls || [])[0];
+        s.textContent = url ? 'Kamera bulundu: ' + url : 'Yerel kamera sunucusu hazır değil.';
+      } catch (e) { s.textContent = 'Kamera arama hatası: ' + (e?.message || e); }
+    };
+    hub.querySelector('#ish-fallback-bt').onclick = async () => {
+      const s = hub.querySelector('#ish-fallback-status');
+      if (!navigator.bluetooth) { s.textContent = 'Bu Electron/Chromium ortamında Web Bluetooth kullanılamıyor.'; return; }
+      try {
+        s.textContent = 'Bluetooth cihazları aranıyor…';
+        const d = await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+        s.textContent = 'Bluetooth bulundu: ' + (d.name || d.id || 'İsimsiz cihaz');
+      } catch (e) { s.textContent = 'Bluetooth: ' + (e?.message || e); }
+    };
+    return true;
+  })()`;
+}
+
+async function injectAssistantPanel() {
+  if (!win || win.isDestroyed()) return;
+  try {
+    await win.webContents.executeJavaScript(fallbackDeviceHubScript());
+    await win.webContents.executeJavaScript(assistantPanelScript());
+    await win.webContents.executeJavaScript(`(() => { const f=document.getElementById('ish-device-hub-fallback'); if(f) f.remove(); return true; })()`);
+  } catch (error) {
+    if (win && !win.isDestroyed()) win.webContents.send('desktop:panel-error', {message:error?.message || String(error)});
+  }
+}
+
 async function createWindow() {
   win = new BrowserWindow({width:1440,height:920,minWidth:1100,minHeight:720,backgroundColor:'#0b1020',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   win.webContents.session.setBluetoothPairingHandler((details, callback) => {
@@ -269,7 +309,10 @@ async function createWindow() {
     const start=Date.now();let ready=false;while(Date.now()-start<30000){try{await fetch('http://127.0.0.1:3016');ready=true;break}catch{await new Promise(r=>setTimeout(r,400));}}if(!ready){dialog.showErrorBox('ISH-Anatomi','3D anatomi motoru 30 saniye içinde hazır olmadı.');app.quit();return;}
     await win.loadURL('http://127.0.0.1:3016');
   }
-  await win.webContents.executeJavaScript(assistantPanelScript());
+  win.webContents.on('did-finish-load', () => { void injectAssistantPanel(); });
+  win.webContents.on('did-navigate', () => { setTimeout(() => { void injectAssistantPanel(); }, 300); });
+  await injectAssistantPanel();
+  setTimeout(() => { void injectAssistantPanel(); }, 1200);
   if (phoneCamera) win.webContents.send('phone-camera:info', phoneCamera.info());
 }
 
