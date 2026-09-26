@@ -55,7 +55,7 @@ function stopCamera(){running=false;if(stream){stream.getTracks().forEach(t=>t.s
 async function requestMotionPermission(){try{if(typeof DeviceOrientationEvent==='undefined')throw new Error('Cihaz yönelim sensörü desteklenmiyor');if(typeof DeviceOrientationEvent.requestPermission==='function'){const p=await DeviceOrientationEvent.requestPermission();if(p!=='granted')throw new Error('İzin verilmedi');}if(motionOn)return;motionOn=true;window.addEventListener('deviceorientation',e=>{const now=Date.now();if(now-lastPoseAt<50)return;lastPoseAt=now;if([e.alpha,e.beta,e.gamma].some(v=>!Number.isFinite(Number(v))))return;fetch('/camera/'+secret+'/pose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({alpha:e.alpha,beta:e.beta,gamma:e.gamma,absolute:e.absolute,timestamp:now})}).catch(()=>{});});statusEl.textContent='Kamera + yönelim aktarımı aktif';}catch(e){statusEl.textContent='Yönelim erişimi: '+e.message;}}
 document.querySelector('#start').addEventListener('click',startCamera);document.querySelector('#motion').addEventListener('click',requestMotionPermission);stopButton.addEventListener('click',stopCamera);
 </script></html>`;
-  return html.replace('__SECRET__',JSON.stringify(secret)).replace('__FPS__',String(Number(fps)));
+  return html.replaceAll('__SECRET__',JSON.stringify(secret)).replaceAll('__FPS__',String(Number(fps)));
 }
 export class LocalPhoneCameraServer{
   constructor({onFrame,onPose,host='0.0.0.0',port=0,httpsPort=0,fps=DEFAULT_FPS,certPath=process.env.ISH_CAMERA_TLS_CERT||'.runtime/local-phone-camera/cert.pem',keyPath=process.env.ISH_CAMERA_TLS_KEY||'.runtime/local-phone-camera/key.pem'}={}){
