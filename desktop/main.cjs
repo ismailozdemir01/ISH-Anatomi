@@ -14,28 +14,49 @@ let virtualCamera;
 let virtualCameraState;
 let cameraAnalyzer;
 let previousPhoneFrame;
+let phoneImagingStarted = false;
+let phoneFrameSequence = 0;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
+const importModule = filePath => import(require('node:url').pathToFileURL(filePath).href);
+
 async function imagingModules() {
   return Promise.all([
-    import(path.join(root(), 'imaging', 'live-controller.mjs')),
-    import(path.join(root(), 'probe', 'manager.mjs')),
-    import(path.join(root(), 'probe', 'stream.mjs')),
-    import(path.join(root(), 'clinical', 'engine.cjs')),
-    import(path.join(root(), 'clinical', 'assessment.mjs')),
-    import(path.join(root(), 'imaging', 'model-runtime.mjs'))
+    importModule(path.join(root(), 'imaging', 'live-controller.mjs')),
+    importModule(path.join(root(), 'probe', 'manager.mjs')),
+    importModule(path.join(root(), 'probe', 'stream.mjs')),
+    importModule(path.join(root(), 'clinical', 'engine.cjs')),
+    importModule(path.join(root(), 'clinical', 'assessment.mjs')),
+    importModule(path.join(root(), 'imaging', 'model-runtime.mjs')),
+    importModule(path.join(root(), 'local-ai', 'catalog.mjs'))
   ]);
 }
 
 async function initImaging() {
-  const [{LiveImagingController}, {ProbeManager}, {ProbeStreamBridge}, clinical, assessment, modelRuntime] = await imagingModules();
+  const [{LiveImagingController}, {ProbeManager}, {ProbeStreamBridge}, clinical, assessment, modelRuntime, catalogModule] = await imagingModules();
+  const atlasCatalog = await catalogModule.loadCatalog(root());
   probeManager = new ProbeManager();
   clinicalAssessment = assessment;
   clinicalEvidenceStore = assessment.createEmptyEvidenceStore();
   inferenceAdapter = modelRuntime.createInferenceAdapter({});
   liveController = new LiveImagingController({
-    anatomyLocator: async () => ({status:'NOT_CONFIGURED', reason:'REAL_ANATOMICAL_LOCALIZER_REQUIRED'}),
+    atlasCatalog: atlasCatalog?.concepts ?? [],
+    anatomyLocator: async frame => {
+      const hint = frame?.atlasHint;
+      if (!hint?.structureId) return {status:'NOT_CONFIGURED', reason:'REAL_ANATOMICAL_LOCALIZER_REQUIRED'};
+      const structure = (atlasCatalog?.concepts ?? []).find(item => item?.id === hint.structureId || item?.structureId === hint.structureId);
+      if (!structure) return {status:'UNKNOWN', reason:'ATLAS_STRUCTURE_NOT_FOUND'};
+      return {
+        status:'READY',
+        structureId: structure.id ?? structure.structureId,
+        groupId: structure.groupId ?? null,
+        confidence: Number(hint.confidence ?? 0.9),
+        transform: Array.isArray(hint.transform) ? hint.transform : [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+        point: Array.isArray(hint.point) ? hint.point : [0,0,0],
+        registration: {status:'GUIDED', source:'PHONE_CAMERA'}
+      };
+    },
     inference: async input => inferenceAdapter.infer(input),
     clinicalEngine: async ({frame, sourceFrame, quality, anatomy, inference}) => clinicalAssessment.assessClinicalCase({
       imaging:{modality:'US', frame, sourceFrame, quality, anatomy, inference},
@@ -78,14 +99,16 @@ async function applyVirtualCameraPose(pose) {
 
 async function initPhoneCamera() {
   const [{LocalPhoneCameraServer}, mapper, analyzer] = await Promise.all([
-    import(path.join(root(), 'camera', 'local-phone-camera.mjs')),
-    import(path.join(root(), 'camera', 'virtual-camera.mjs')),
-    import(path.join(root(), 'camera', 'frame-analysis.mjs'))
+    importModule(path.join(root(), 'camera', 'local-phone-camera.mjs')),
+    importModule(path.join(root(), 'camera', 'virtual-camera.mjs')),
+    importModule(path.join(root(), 'camera', 'frame-analysis.mjs'))
   ]);
   virtualCamera = mapper;
   virtualCameraState = mapper.createVirtualCameraState();
   cameraAnalyzer = analyzer;
   previousPhoneFrame = null;
+  phoneImagingStarted = false;
+  phoneFrameSequence = 0;
   phoneCamera = new LocalPhoneCameraServer({
     onFrame: async buffer => {
       const image = nativeImage.createFromBuffer(buffer);
@@ -98,7 +121,23 @@ async function initPhoneCamera() {
       const analysis = cameraAnalyzer.analyzePhoneFrame(frame);
       const motion = cameraAnalyzer.comparePhoneFrames(previousPhoneFrame, frame);
       previousPhoneFrame = frame;
-      if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion});
+      if (!phoneImagingStarted) {
+        phoneImagingStarted = true;
+        liveController?.start({id:'phone-camera-live',source:'PHONE_CAMERA',transport:'wifi',modality:'PHONE_CAMERA',mode:'VISUAL',status:'CONNECTED',startedAt:Date.now(),frames:0,lastFrameAt:null});
+      }
+      const pipelineFrame = {
+        id:'phone-' + (++phoneFrameSequence),
+        source:'PHONE_CAMERA',
+        width:size.width,
+        height:size.height,
+        timestamp:Date.now(),
+        data:gray
+      };
+      let liveResult = null;
+      try { liveResult = await liveController?.push(pipelineFrame); } catch (error) {
+        liveResult = {status:'ERROR',reason:error.message};
+      }
+      if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion,liveResult});
     },
     onPose: async pose => {
       if (win && !win.isDestroyed()) win.webContents.send('phone-camera:pose', pose);
@@ -174,7 +213,10 @@ function assistantPanelScript() {
     let virtualOn=false;const virtualButton=box.querySelector('#ish-phone-virtual');virtualButton.addEventListener('click',async()=>{virtualOn=!virtualOn;const result=await window.ishAnatomi.setVirtualCamera(virtualOn);virtualButton.textContent=virtualOn?'3D Sanal Kamera Açık':'3D Sanal Kamerayı Aç';virtualButton.classList.toggle('active',virtualOn);box.querySelector('#ish-phone-status').textContent=result.status==='READY'?'Telefon yönelimi 3D anatomi kamerasını sürüyor.':'Sanal kamera: '+result.status;});
     window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.safety?.status||r.clinical?.status||'UNKNOWN';});
     window.ishAnatomi.onPhoneCameraInfo(info=>{box.querySelector('#ish-phone-status').textContent='Telefonu aynı yerel ağa bağla ve aşağıdaki adresi aç.';box.querySelector('#ish-phone-url').textContent=info.urls?.[0]||'Yerel ağ adresi bulunamadı';});
-    window.ishAnatomi.onPhoneCameraFrame(payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
+    window.ishAnatomi.onPhoneCameraFrame(payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';
+      const live=payload.liveResult;
+      if(live?.registration?.structureId) box.querySelector('#ish-anatomy').textContent=live.registration.structureId;
+      if(live?.atlasOverlay?.visible) box.querySelector('#ish-phone-status').textContent='Telefon görüntüsü Atlas eşleşmesi için kayıtlı · '+live.atlasOverlay.structureId;box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
     window.ishAnatomi.onPhoneCameraPose(p=>{box.querySelector('#ish-phone-pose').textContent=[p.alpha,p.beta,p.gamma].map(v=>Number(v).toFixed(1)+'°').join(' / ');});
   })()`;
 }
@@ -210,7 +252,7 @@ app.whenReady().then(async()=>{
   ipcMain.handle('probe:connect',async(_e,id)=>{
     const status=await probeManager.connect(id);
     const adapter=probeManager.active;
-    if(adapter?.frameSource){probeStream=new (await import(path.join(root(),'probe','stream.mjs'))).ProbeStreamBridge({controller:liveController,frameSource:adapter.frameSource});void probeStream.start({transport:adapter.transport,probeId:adapter.id});}
+    if(adapter?.frameSource){probeStream=new (await importModule(path.join(root(),'probe','stream.mjs'))).ProbeStreamBridge({controller:liveController,frameSource:adapter.frameSource});void probeStream.start({transport:adapter.transport,probeId:adapter.id});}
     return status;
   });
   ipcMain.handle('probe:disconnect',()=>{probeStream?.stop?.();return probeManager?.disconnect?.()??{status:'NOT_CONFIGURED'};});
