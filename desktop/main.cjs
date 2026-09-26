@@ -127,16 +127,23 @@ async function initPhoneCamera() {
           message:'Telefon kamerası yerel optik görüntü kaynağıdır; US pipelineına zorlanmaz.'
         });
       }
+      if (!liveController) return;
+      if (!phoneImagingStarted) {
+        phoneImagingStarted = true;
+        liveController.start({transport:'wifi',source:'PHONE_CAMERA',deviceId:'LOCAL_PHONE_CAMERA'});
+      }
+      const timestamp=Date.now();
       const pipelineFrame = {
         id:'phone-' + (++phoneFrameSequence),
         source:'PHONE_CAMERA',
         width:size.width,
         height:size.height,
-        timestamp:Date.now(),
+        timestamp,
         data:gray,
+        metadata:{timestamp,frameNumber:phoneFrameSequence,source:'PHONE_CAMERA'},
         imageBase64:buffer.toString('base64')
       };
-      const liveResult = null;
+      const liveResult = await liveController.push(pipelineFrame);
       if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion,liveResult});
     },
     onPose: async pose => {
@@ -489,7 +496,7 @@ app.whenReady().then(async()=>{
   ipcMain.handle('phone-camera:start',async()=>{if(!phoneCamera)return {status:'NOT_CONFIGURED'};const info=await phoneCamera.start();return {...info,status:'STARTED'};});
   ipcMain.handle('phone-camera:status',()=>phoneCamera?.status?.()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('phone-camera:visual-status',()=>({status:'LOCAL_VISUAL_MATCH_DISABLED',reason:'ANATOMY_MODEL_REQUIRED'}));
-  ipcMain.handle('phone-camera:stop',()=>phoneCamera?.stop?.()??{status:'NOT_CONFIGURED'});
+  ipcMain.handle('phone-camera:stop',()=>{phoneImagingStarted=false;return phoneCamera?.stop?.()??{status:'NOT_CONFIGURED'};});
   ipcMain.handle('phone-camera:set-virtual',(_e,enabled)=>{virtualCameraState=virtualCamera?virtualCamera.enableVirtualCamera(virtualCameraState,enabled):virtualCameraState;return {status:virtualCameraState?.active?'READY':'DISABLED'};});
   ipcMain.handle('phone-camera:virtual-status',()=>({status:virtualCameraState?.active?'READY':'DISABLED'}));
   await createWindow();
