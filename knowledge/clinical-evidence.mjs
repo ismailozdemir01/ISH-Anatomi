@@ -9,7 +9,8 @@ const evidenceRecord=e=>({chunkId:e.chunkId,source:e.source?.title??null,provide
 
 export function assessWithEvidence({query='',candidates=[],store,observations=[],measurements=[],imagingFindings=[],ontologyCatalog=[],requireDiagnosticReference=false,structureId=null,groupId=null}={}) {
   const ontology=mapCase({observations,measurements,imagingFindings},ontologyCatalog);
-  if(requireDiagnosticReference&&(!structureId||!groupId)) return {status:DECISION_STATUS.ANATOMICAL_REFERENCE_SCOPE_REQUIRED,candidates:[],evidence:[],diagnosticEvidence:[],graph:buildEvidenceGraph({observations,measurements,imagingFindings,evidence:[]}),ontology,referenceScope:{structureId:structureId??null,groupId:groupId??null}};
+  const hasScope=Boolean(structureId||groupId);
+  if(requireDiagnosticReference&&hasScope&&(!structureId||!groupId)) return {status:DECISION_STATUS.ANATOMICAL_REFERENCE_SCOPE_REQUIRED,candidates:[],evidence:[],diagnosticEvidence:[],graph:buildEvidenceGraph({observations,measurements,imagingFindings,evidence:[]}),ontology,referenceScope:{structureId:structureId??null,groupId:groupId??null}};
   const evidence=searchEvidence(query,store,{structureId,groupId,domain:requireDiagnosticReference?REFERENCE_DOMAIN.DIAGNOSIS:null});
   if(evidence.status==='INSUFFICIENT_DATA') return {status:DECISION_STATUS.INSUFFICIENT_DATA,candidates:[],evidence:[],diagnosticEvidence:[],graph:null,ontology,referenceScope:evidence.scope};
   if(!evidence.results.length) return {status:requireDiagnosticReference?DECISION_STATUS.DIAGNOSTIC_REFERENCE_REQUIRED:DECISION_STATUS.NO_EVIDENCE,candidates:[],evidence:[],diagnosticEvidence:[],graph:buildEvidenceGraph({observations,measurements,imagingFindings,evidence:[]}),ontology,referenceScope:evidence.scope};
