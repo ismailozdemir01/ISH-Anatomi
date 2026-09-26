@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {X509Certificate} from 'node:crypto';
 
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_POSE_BYTES = 16 * 1024;
@@ -30,6 +31,33 @@ function readBody(req, limit) {
 }
 function send(res,status,body,type='application/json; charset=utf-8'){res.writeHead(status,{'content-type':type,'cache-control':'no-store'});res.end(typeof body==='string'?body:JSON.stringify(body));}
 function mkcertRootCA(){try{const dir=execFileSync('mkcert',['-CAROOT'],{encoding:'utf8'}).trim();const file=path.join(dir,'rootCA.pem');return fs.existsSync(file)?file:null;}catch{return null;}}
+function mobileConfigForRootCA(pem){
+  const der=new X509Certificate(pem).raw.toString('base64');
+  const uuid=()=>crypto.randomUUID().toUpperCase();
+  const profile=uuid(),payload=uuid();
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>PayloadContent</key><array><dict>
+<key>PayloadCertificateFileName</key><string>ISH-Anatomi-rootCA.cer</string>
+<key>PayloadContent</key><data>${der}</data>
+<key>PayloadDescription</key><string>ISH-Anatomi yerel kamera güven sertifikası</string>
+<key>PayloadDisplayName</key><string>ISH-Anatomi Local Camera CA</string>
+<key>PayloadIdentifier</key><string>com.ish.anatomi.camera.ca</string>
+<key>PayloadOrganization</key><string>ISH-Anatomi</string>
+<key>PayloadType</key><string>com.apple.security.root</string>
+<key>PayloadUUID</key><string>${payload}</string>
+<key>PayloadVersion</key><integer>1</integer>
+</dict></array>
+<key>PayloadDisplayName</key><string>ISH-Anatomi Local Camera</string>
+<key>PayloadIdentifier</key><string>com.ish.anatomi.camera.profile</string>
+<key>PayloadOrganization</key><string>ISH-Anatomi</string>
+<key>PayloadRemovalDisallowed</key><false/>
+<key>PayloadType</key><string>Configuration</string>
+<key>PayloadUUID</key><string>${profile}</string>
+<key>PayloadVersion</key><integer>1</integer>
+</dict></plist>`;
+}
 
 function ensureTlsMaterial(certPath, keyPath, host) {
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) return true;
@@ -47,7 +75,7 @@ function ensureTlsMaterial(certPath, keyPath, host) {
 }
 
 function page(secret,fps){
-  const html = `<!doctype html><html lang="tr"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ISH-Anatomi · Telefon Kamerası</title><style>body{font:16px system-ui;margin:0;padding:24px;background:#0b1020;color:#fff}button{padding:14px 18px;border:0;border-radius:12px;margin:6px 0;font-weight:700}video{width:100%;max-width:720px;border-radius:16px;background:#000}#s{color:#cbd5e1;line-height:1.5}</style><h2>ISH-Anatomi · Telefon Kamerası</h2><p>Telefon kamerası doğrudan yerel bilgisayara gönderilir. Bulut/API yok.</p><button id="start" type="button">▶ Kamerayı başlat</button><button id="motion" type="button">🧭 Yönelim iznini ver</button><button id="stop" type="button" disabled>■ Durdur</button><p id="s">Hazır · hedef __FPS__ FPS</p><p style="font-size:13px;color:#93c5fd">Telefon tarayıcısında kamera için HTTPS gerekir. İlk kullanımda <a id="ca" href="./rootCA.pem" style="color:#7dd3fc">yerel güven sertifikasını indir</a>, sonra HTTPS adresini aç.</p><video id="v" autoplay playsinline muted></video><canvas id="c" hidden></canvas><script>
+  const html = `<!doctype html><html lang="tr"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ISH-Anatomi · Telefon Kamerası</title><style>body{font:16px system-ui;margin:0;padding:24px;background:#0b1020;color:#fff}button{padding:14px 18px;border:0;border-radius:12px;margin:6px 0;font-weight:700}video{width:100%;max-width:720px;border-radius:16px;background:#000}#s{color:#cbd5e1;line-height:1.5}</style><h2>ISH-Anatomi · Telefon Kamerası</h2><p>Telefon kamerası doğrudan yerel bilgisayara gönderilir. Bulut/API yok.</p><button id="start" type="button">▶ Kamerayı başlat</button><button id="motion" type="button">🧭 Yönelim iznini ver</button><button id="stop" type="button" disabled>■ Durdur</button><p id="s">Hazır · hedef __FPS__ FPS</p><p style="font-size:13px;color:#93c5fd">Telefon tarayıcısında kamera için HTTPS gerekir. İlk kullanımda <a id="ca" href="/camera/__SECRET__/rootCA.mobileconfig" style="color:#7dd3fc">yerel güven sertifikasını indir</a>, sonra HTTPS adresini aç.</p><video id="v" autoplay playsinline muted></video><canvas id="c" hidden></canvas><script>
 const secret="__SECRET__", targetFps=__FPS__, statusEl=document.querySelector('#s'), video=document.querySelector('#v'), canvas=document.querySelector('#c'), stopButton=document.querySelector('#stop');
 let stream=null,running=false,motionOn=false,lastPoseAt=0;
 async function startCamera(){try{if(!window.isSecureContext)throw new Error('HTTPS güvenli bağlam gerekli. Önce rootCA.pem sertifikasını güvenilir olarak kurup HTTPS adresini açın.');if(!navigator.mediaDevices?.getUserMedia)throw new Error('Bu tarayıcı kamera API erişimini vermiyor');stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:targetFps,max:targetFps}},audio:false});await video.play().catch(()=>{});running=true;stopButton.disabled=false;statusEl.textContent='Telefon kamerası bağlı · PC aktarımı başladı';sendFrames();}catch(e){statusEl.textContent='Kamera erişimi başarısız: '+e.message;}}
@@ -70,6 +98,7 @@ export class LocalPhoneCameraServer{
     try{const prefix='/camera/'+this.secret;
       if(req.url===prefix||req.url===prefix+'/'){if(req.method!=='GET')return send(res,405,{error:'METHOD_NOT_ALLOWED'});return send(res,200,page(this.secret,this.fps),'text/html; charset=utf-8');}
       if(req.url===prefix+'/rootCA.pem'){if(req.method!=='GET')return send(res,405,{error:'METHOD_NOT_ALLOWED'});const ca=mkcertRootCA();if(!ca)return send(res,404,{error:'ROOT_CA_NOT_AVAILABLE'});res.writeHead(200,{'content-type':'application/x-pem-file','content-disposition':'attachment; filename="ISH-Anatomi-rootCA.pem"','cache-control':'no-store'});return fs.createReadStream(ca).pipe(res);}
+      if(req.url===prefix+'/rootCA.mobileconfig'){if(req.method!=='GET')return send(res,405,{error:'METHOD_NOT_ALLOWED'});const ca=mkcertRootCA();if(!ca)return send(res,404,{error:'ROOT_CA_NOT_AVAILABLE'});const profile=mobileConfigForRootCA(fs.readFileSync(ca,'utf8'));res.writeHead(200,{'content-type':'application/x-apple-aspen-config','content-disposition':'attachment; filename="ISH-Anatomi-Local-Camera.mobileconfig"','cache-control':'no-store'});return res.end(profile);}
       if(req.url===prefix+'/frame'){if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'});const body=await readBody(req,MAX_FRAME_BYTES);if(!body.length||body[0]!==0xff||body[1]!==0xd8)return send(res,415,{error:'JPEG_REQUIRED'});this.frames++;this.lastFrameAt=Date.now();await this.onFrame?.(body);return send(res,204,'');}
       if(req.url===prefix+'/pose'){if(req.method!=='POST')return send(res,405,{error:'METHOD_NOT_ALLOWED'});const body=await readBody(req,MAX_POSE_BYTES);const pose=JSON.parse(body.toString('utf8'));if(![pose.alpha,pose.beta,pose.gamma].every(v=>Number.isFinite(Number(v))))return send(res,400,{error:'INVALID_POSE'});this.lastPoseAt=Date.now();await this.onPose?.({...pose,alpha:Number(pose.alpha),beta:Number(pose.beta),gamma:Number(pose.gamma)});return send(res,204,'');}
       if(req.url==='/health')return send(res,200,this.status());return send(res,404,{error:'NOT_FOUND'});
