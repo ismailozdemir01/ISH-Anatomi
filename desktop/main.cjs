@@ -1,6 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { pathToFileURL } = require('node:url');
 
 let win;
 let liveController;
@@ -19,7 +20,7 @@ let phoneFrameSequence = 0;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
-const importModule = filePath => import(require('node:url').pathToFileURL(filePath).href);
+const importModule = filePath => import(pathToFileURL(filePath).href);
 
 async function imagingModules() {
   return Promise.all([
@@ -229,10 +230,11 @@ async function createWindow() {
     await win.loadFile(index);
   } else {
     const {spawn}=require('node:child_process');
-    const child=spawn(process.platform==='win32'?'npm.cmd':'npm',['run','dev','--','--host','127.0.0.1'],{cwd:atlasDir(),stdio:'inherit',shell:false,env:{...process.env,BROWSER:'none'}});
+    const npmCli=path.join(process.env.ProgramFiles||'C:\\Program Files','nodejs','node_modules','npm','bin','npm-cli.js');
+    const child=spawn(process.execPath,[npmCli,'run','dev','--','--host','127.0.0.1'],{cwd:atlasDir(),stdio:'inherit',shell:false,env:{...process.env,BROWSER:'none'}});
     win.once('closed',()=>{if(!child.killed)child.kill();});
-    const start=Date.now();let ready=false;while(Date.now()-start<30000){try{await fetch('http://127.0.0.1:5173');ready=true;break}catch{await new Promise(r=>setTimeout(r,400));}}if(!ready){dialog.showErrorBox('ISH-Anatomi','3D anatomi motoru 30 saniye içinde hazır olmadı.');app.quit();return;}
-    await win.loadURL('http://127.0.0.1:5173');
+    const start=Date.now();let ready=false;while(Date.now()-start<30000){try{await fetch('http://127.0.0.1:3016');ready=true;break}catch{await new Promise(r=>setTimeout(r,400));}}if(!ready){dialog.showErrorBox('ISH-Anatomi','3D anatomi motoru 30 saniye içinde hazır olmadı.');app.quit();return;}
+    await win.loadURL('http://127.0.0.1:3016');
   }
   await win.webContents.executeJavaScript(assistantPanelScript());
   if (phoneCamera) win.webContents.send('phone-camera:info', phoneCamera.info());
