@@ -30,13 +30,19 @@ async function imagingModules() {
     importModule(path.join(root(), 'clinical', 'engine.cjs')),
     importModule(path.join(root(), 'clinical', 'assessment.mjs')),
     importModule(path.join(root(), 'imaging', 'model-runtime.mjs')),
-    importModule(path.join(root(), 'local-ai', 'catalog.mjs'))
+    importModule(path.join(root(), 'local-ai', 'catalog.mjs')),
+    importModule(path.join(root(), 'imaging', 'vision-anatomy-localizer.mjs'))
   ]);
 }
 
 async function initImaging() {
-  const [{LiveImagingController}, {ProbeManager}, {ProbeStreamBridge}, clinical, assessment, modelRuntime, catalogModule] = await imagingModules();
+  const [{LiveImagingController}, {ProbeManager}, {ProbeStreamBridge}, clinical, assessment, modelRuntime, catalogModule, visionModule] = await imagingModules();
   const atlasCatalog = await catalogModule.loadCatalog(root());
+  const visionLocalizer = visionModule.createVisionAnatomyLocalizer({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_VISION_MODEL || 'gpt-5.6-luna',
+    resolveConcept: query => catalogModule.findConcept(atlasCatalog, query)
+  });
   probeManager = new ProbeManager();
   clinicalAssessment = assessment;
   clinicalEvidenceStore = assessment.createEmptyEvidenceStore();
@@ -44,8 +50,13 @@ async function initImaging() {
   liveController = new LiveImagingController({
     atlasCatalog: atlasCatalog?.concepts ?? [],
     anatomyLocator: async frame => {
+      if (frame?.source === 'PHONE_CAMERA' && frame?.imageBase64) {
+        const visual = await visionLocalizer.locate(frame);
+        if (visual.status === 'READY') return visual;
+        if (visual.status === 'ERROR') return visual;
+      }
       const hint = frame?.atlasHint;
-      if (!hint?.structureId) return {status:'NOT_CONFIGURED', reason:'REAL_ANATOMICAL_LOCALIZER_REQUIRED'};
+      if (!hint?.structureId) return {status:'NOT_CONFIGURED', reason:frame?.source === 'PHONE_CAMERA' ? 'VISUAL_LOCALIZER_UNAVAILABLE' : 'REAL_ANATOMICAL_LOCALIZER_REQUIRED'};
       const structure = (atlasCatalog?.concepts ?? []).find(item => item?.id === hint.structureId || item?.structureId === hint.structureId);
       if (!structure) return {status:'UNKNOWN', reason:'ATLAS_STRUCTURE_NOT_FOUND'};
       return {
@@ -132,11 +143,16 @@ async function initPhoneCamera() {
         width:size.width,
         height:size.height,
         timestamp:Date.now(),
-        data:gray
+        data:gray,
+        imageBase64:buffer.toString('base64')
       };
       let liveResult = null;
       try { liveResult = await liveController?.push(pipelineFrame); } catch (error) {
         liveResult = {status:'ERROR',reason:error.message};
+      }
+      if (liveResult?.atlasMapping?.status === 'MAPPED' && liveResult.atlasMapping.structureId && liveResult.atlasMapping.structureId !== globalThis.__ishLastAtlasStructure) {
+        globalThis.__ishLastAtlasStructure = liveResult.atlasMapping.structureId;
+        void executeViewerActions([{type:'search',query:liveResult.atlasMapping.structureId}]);
       }
       if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion,liveResult});
     },
