@@ -234,6 +234,7 @@ function assistantPanelScript() {
     window.ishAnatomi.onPhoneCameraFrame(payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';
       const live=payload.liveResult;
       if(live?.registration?.structureId) box.querySelector('#ish-anatomy').textContent=live.registration.structureId;
+      if(live?.anatomy?.name) box.querySelector('#ish-phone-status').textContent='Atlas eşleşmesi: '+live.anatomy.name+' · güven '+(Number(live.anatomy.confidence||0)*100).toFixed(0)+'%';
       if(live?.atlasOverlay?.visible) box.querySelector('#ish-phone-status').textContent='Telefon görüntüsü Atlas eşleşmesi için kayıtlı · '+live.atlasOverlay.structureId;box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
     window.ishAnatomi.onPhoneCameraPose(p=>{box.querySelector('#ish-phone-pose').textContent=[p.alpha,p.beta,p.gamma].map(v=>Number(v).toFixed(1)+'°').join(' / ');});
   })()`;
