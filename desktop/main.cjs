@@ -20,6 +20,9 @@ let phoneFrameSequence = 0;
 let atlasCatalog = null;
 let bluetoothSelectionCallback = null;
 let bluetoothPairingCallback = null;
+// Electron Chromium Web Bluetooth is explicitly enabled for the local desktop runtime.
+app.commandLine.appendSwitch('enable-experimental-web-platform-features');
+app.commandLine.appendSwitch('enable-features','WebBluetooth');
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
@@ -312,6 +315,12 @@ async function injectAssistantPanel() {
 
 async function createWindow() {
   win = new BrowserWindow({width:1440,height:920,minWidth:1100,minHeight:720,backgroundColor:'#0b1020',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win.webContents.on('console-message', (_event, level, message) => {
+    if (message) console.log('[renderer]', level, message);
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[renderer-gone]', details?.reason || 'unknown', details?.exitCode ?? '');
+  });
   win.webContents.session.setBluetoothPairingHandler((details, callback) => {
     bluetoothPairingCallback = callback;
     if (win && !win.isDestroyed()) win.webContents.send('bluetooth:pairing-request', {deviceId: details.deviceId, pairingKind: details.pairingKind, pin: details.pin || null});
