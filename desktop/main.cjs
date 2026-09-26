@@ -17,7 +17,6 @@ let cameraAnalyzer;
 let previousPhoneFrame;
 let phoneImagingStarted = false;
 let phoneFrameSequence = 0;
-let lastAtlasStructureId = null;
 let atlasCatalog = null;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
@@ -47,7 +46,7 @@ async function initImaging() {
     atlasCatalog: atlasCatalog?.concepts ?? [],
     anatomyLocator: async frame => ({
       status:'NOT_CONFIGURED',
-      reason:frame?.source==='PHONE_CAMERA'?'LOCAL_VISUAL_MATCH_REQUIRED':'REAL_ANATOMICAL_LOCALIZER_REQUIRED'
+      reason:frame?.source==='PHONE_CAMERA'?'LOCAL_ANATOMY_MODEL_REQUIRED':'REAL_ANATOMICAL_LOCALIZER_REQUIRED'
     }),
     inference: async input => inferenceAdapter.infer(input),
     clinicalEngine: async ({frame, sourceFrame, quality, anatomy, inference}) => clinicalAssessment.assessClinicalCase({
@@ -115,7 +114,11 @@ async function initPhoneCamera() {
       previousPhoneFrame = frame;
       if (!phoneImagingStarted) {
         phoneImagingStarted = true;
-        liveController?.start({id:'phone-camera-live',source:'PHONE_CAMERA',transport:'wifi',modality:'PHONE_CAMERA',mode:'VISUAL',status:'CONNECTED',startedAt:Date.now(),frames:0,lastFrameAt:null});
+        if (win && !win.isDestroyed()) win.webContents.send('phone-camera:status-update', {
+          status:'CONNECTED',
+          reason:'PHONE_CAMERA_IS_NOT_ULTRASOUND',
+          message:'Telefon kamerası yerel optik görüntü kaynağıdır; US pipelineına zorlanmaz.'
+        });
       }
       const pipelineFrame = {
         id:'phone-' + (++phoneFrameSequence),
@@ -126,14 +129,7 @@ async function initPhoneCamera() {
         data:gray,
         imageBase64:buffer.toString('base64')
       };
-      let liveResult = null;
-      try { liveResult = await liveController?.push(pipelineFrame); } catch (error) {
-        liveResult = {status:'ERROR',reason:error.message};
-      }
-      if (liveResult?.atlasMapping?.status === 'MAPPED' && liveResult.atlasMapping.structureId && liveResult.atlasMapping.structureId !== lastAtlasStructureId) {
-        lastAtlasStructureId = liveResult.atlasMapping.structureId;
-        void executeViewerActions([{type:'search',query:liveResult.anatomy?.name || liveResult.atlasMapping.structureId}]);
-      }
+      const liveResult = null;
       if (win && !win.isDestroyed()) win.webContents.send('phone-camera:frame',{width:size.width,height:size.height,jpeg:buffer,analysis,motion,liveResult});
     },
     onPose: async pose => {
@@ -198,40 +194,19 @@ async function executeViewerActions(actions) {
   try { await win.webContents.executeJavaScript(viewerScript(actions)); return {ok:true}; } catch(error) { return {ok:false,error:error.message}; }
 }
 
-function assistantPanelScript(atlasConcepts = []) {
+function assistantPanelScript() {
   return `(() => {
     if(document.getElementById('ish-local-assistant')) return;
     const style=document.createElement('style');style.textContent='#ish-local-assistant{position:fixed;right:18px;top:18px;width:380px;z-index:2147483647;background:rgba(12,18,30,.97);color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.35);font:14px system-ui,sans-serif}#ish-local-assistant h3{margin:0 0 8px;font-size:15px}#ish-local-assistant .row{display:flex;gap:7px}#ish-local-assistant input{flex:1;padding:10px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff}#ish-local-assistant button{padding:10px 12px;border:0;border-radius:10px;background:#334155;color:#fff;cursor:pointer}#ish-local-assistant .status{margin-top:8px;color:#cbd5e1;font-size:12px;line-height:1.45}#ish-local-assistant .answer{margin-top:8px;color:#f8fafc;line-height:1.45}#ish-live,#ish-phone{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.12)}#ish-live .metric,#ish-phone .metric{display:flex;justify-content:space-between;margin:4px 0;color:#cbd5e1}#ish-live button,#ish-phone button{width:100%;margin-top:6px}#ish-phone code{display:block;word-break:break-all;color:#93c5fd;font-size:11px;margin-top:6px}#ish-phone img{width:100%;max-height:190px;object-fit:contain;background:#000;border-radius:10px;margin-top:8px}#ish-phone .active{background:#0f766e}';document.head.appendChild(style);
-    const atlasConcepts = ${JSON.stringify(atlasConcepts)};
-    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div><div class="answer" id="ish-ai-answer"></div><section id="ish-live"><strong>Canlı Ultrason</strong><div class="metric"><span>Prob</span><span id="ish-probe">NOT_CONNECTED</span></div><div class="metric"><span>Görüntü</span><span id="ish-frame">NO_SIGNAL</span></div><div class="metric"><span>Anatomi</span><span id="ish-anatomy">UNKNOWN</span></div><div class="metric"><span>Klinik</span><span id="ish-clinical">UNKNOWN</span></div><button id="ish-probe-refresh">Prob durumunu yenile</button></section><section id="ish-phone"><strong>Telefon · Lokal Görsel Anatomi</strong><div class="status" id="ish-phone-status">Yerel bağlantı hazırlanıyor…</div><code id="ish-phone-url">-</code><img id="ish-phone-img" alt="Yerel telefon kamera önizlemesi"><div class="metric"><span>Yönelim</span><span id="ish-phone-pose">NO_SIGNAL</span></div><div class="metric"><span>Görüntü kalitesi</span><span id="ish-phone-quality">NO_SIGNAL</span></div><div class="metric"><span>Hareket</span><span id="ish-phone-motion">NO_SIGNAL</span></div><div class="metric"><span>Atlas</span><span id="ish-phone-atlas">BEKLENİYOR</span></div><button id="ish-phone-virtual">3D Sanal Kamerayı Aç</button></section></aside>';document.body.appendChild(box);
+    const box=document.createElement('aside');box.id='ish-local-assistant';box.innerHTML='<h3>ISH-Anatomi · Yerel AI</h3><div class="row"><input id="ish-ai-q" placeholder="Anatomi komutu veya soru…"><button id="ish-ai-send">Uygula</button></div><div class="status" id="ish-ai-status">Harici AI API yok. Gerçek atlas kataloğu kullanılır.</div><div class="answer" id="ish-ai-answer"></div><section id="ish-live"><strong>Canlı Ultrason</strong><div class="metric"><span>Prob</span><span id="ish-probe">NOT_CONNECTED</span></div><div class="metric"><span>Görüntü</span><span id="ish-frame">NO_SIGNAL</span></div><div class="metric"><span>Anatomi</span><span id="ish-anatomy">UNKNOWN</span></div><div class="metric"><span>Klinik</span><span id="ish-clinical">UNKNOWN</span></div><button id="ish-probe-refresh">Prob durumunu yenile</button></section><section id="ish-phone"><strong>Telefon · Lokal Kamera</strong><div class="status" id="ish-phone-status">Yerel bağlantı hazırlanıyor…</div><code id="ish-phone-url">-</code><img id="ish-phone-img" alt="Yerel telefon kamera önizlemesi"><div class="metric"><span>Yönelim</span><span id="ish-phone-pose">NO_SIGNAL</span></div><div class="metric"><span>Görüntü kalitesi</span><span id="ish-phone-quality">NO_SIGNAL</span></div><div class="metric"><span>Hareket</span><span id="ish-phone-motion">NO_SIGNAL</span></div><div class="metric"><span>Atlas</span><span id="ish-phone-atlas">ANATOMY_MODEL_REQUIRED</span></div><button id="ish-phone-virtual">3D Sanal Kamerayı Aç</button></section></aside>';document.body.appendChild(box);
     const q=box.querySelector('#ish-ai-q'),send=box.querySelector('#ish-ai-send'),status=box.querySelector('#ish-ai-status'),answer=box.querySelector('#ish-ai-answer');
     const run=async()=>{const value=q.value.trim();if(!value)return;status.textContent='Yerel anatomi motoru çalışıyor…';answer.textContent='';try{const result=await window.ishAnatomi.compileIntent(value);const cat=result.catalog&&result.catalog.status==='READY'?' · '+result.catalog.parts+' parça / '+result.catalog.concepts+' kavram':'';status.textContent=result.answer+cat;if(result.knowledge?.status==='KNOWN')answer.textContent=result.knowledge.answer;await window.ishAnatomi.executeViewerActions(result.actions||[]);}catch(e){status.textContent='Yerel motor hatası: '+e.message;}};
     send.addEventListener('click',run);q.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
     const refreshProbe=async()=>{try{const s=await window.ishAnatomi.probeStatus();box.querySelector('#ish-probe').textContent=s.status+(s.transport?' · '+s.transport:'');}catch(e){box.querySelector('#ish-probe').textContent='ERROR';}};box.querySelector('#ish-probe-refresh').addEventListener('click',refreshProbe);refreshProbe();
-    let visualClassifier=null, visualClassifierPromise=null, visualBusy=false, lastVisualAt=0;
-    const VISUAL_MODEL='Xenova/clip-vit-base-patch32';
-    const VISUAL_LIBRARY='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm';
-    const VISUAL_MIN_SCORE=0.28, VISUAL_MIN_MARGIN=0.035;
-    const visualCandidates=atlasConcepts.map(c=>({id:c.id??c.structureId,name:String(c.name??'').trim()})).filter(c=>c.id&&c.name);
-    const visualCandidateLabels=visualCandidates.map(c=>c.name);
-    async function loadVisualClassifier(){
-      if(visualClassifier)return visualClassifier;if(visualClassifierPromise)return visualClassifierPromise;
-      visualClassifierPromise=(async()=>{const {pipeline,env}=await import(VISUAL_LIBRARY);env.useBrowserCache=true;env.useWasmCache=true;env.allowRemoteModels=true;try{return visualClassifier=await pipeline('zero-shot-image-classification',VISUAL_MODEL,{device:navigator.gpu?'webgpu':undefined});}catch{return visualClassifier=await pipeline('zero-shot-image-classification',VISUAL_MODEL);}})();
-      try{return await visualClassifierPromise;}finally{visualClassifierPromise=null;}
-    }
-    async function localVisualAtlasMatch(jpeg){
-      if(!jpeg||visualBusy||Date.now()-lastVisualAt<1600||!visualCandidateLabels.length)return null;
-      visualBusy=true;lastVisualAt=Date.now();
-      try{const classifier=await loadVisualClassifier();const bytes=new Uint8Array(jpeg);let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));const output=await classifier('data:image/jpeg;base64,'+btoa(binary),visualCandidateLabels,{top_k:5});const top=output?.[0],second=output?.[1];if(!top)return {status:'UNKNOWN',reason:'NO_VISUAL_RESULT'};const score=Number(top.score||0),margin=score-Number(second?.score||0),concept=visualCandidates.find(c=>c.name===top.label);if(!concept)return {status:'UNKNOWN',reason:'ATLAS_CONCEPT_NOT_FOUND'};if(score<VISUAL_MIN_SCORE||margin<VISUAL_MIN_MARGIN)return {status:'UNKNOWN',reason:'LOW_VISUAL_CONFIDENCE',score,margin};return {...await window.ishAnatomi.visualAtlasMatch({structureId:concept.id,confidence:score}),model:VISUAL_MODEL,score,margin};}catch(error){return {status:'ERROR',reason:String(error?.message||error)}}finally{visualBusy=false;}
-    }
     let virtualOn=false;const virtualButton=box.querySelector('#ish-phone-virtual');virtualButton.addEventListener('click',async()=>{virtualOn=!virtualOn;const result=await window.ishAnatomi.setVirtualCamera(virtualOn);virtualButton.textContent=virtualOn?'3D Sanal Kamera Açık':'3D Sanal Kamerayı Aç';virtualButton.classList.toggle('active',virtualOn);box.querySelector('#ish-phone-status').textContent=result.status==='READY'?'Telefon yönelimi 3D anatomi kamerasını sürüyor.':'Sanal kamera: '+result.status;});
     window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.safety?.status||r.clinical?.status||'UNKNOWN';});
-    window.ishAnatomi.onPhoneCameraInfo(info=>{box.querySelector('#ish-phone-status').textContent='Telefonu aynı yerel ağa bağla ve aşağıdaki adresi aç.';box.querySelector('#ish-phone-url').textContent=info.urls?.[0]||'Yerel ağ adresi bulunamadı';});
-    window.ishAnatomi.onPhoneCameraFrame(async payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';
-      const live=payload.liveResult;
-      if(live?.registration?.structureId) box.querySelector('#ish-anatomy').textContent=live.registration.structureId;
-      if(live?.anatomy?.name) box.querySelector('#ish-phone-status').textContent='Atlas eşleşmesi: '+live.anatomy.name+' · güven '+(Number(live.anatomy.confidence||0)*100).toFixed(0)+'%';
-      if(live?.atlasOverlay?.visible) box.querySelector('#ish-phone-status').textContent='Telefon görüntüsü Atlas eşleşmesi için kayıtlı · '+live.atlasOverlay.structureId;box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
+    window.ishAnatomi.onPhoneCameraInfo(info=>{box.querySelector('#ish-phone-status').textContent='Telefonu aynı yerel ağa bağla ve aşağıdaki adresi aç.';box.querySelector('#ish-phone-url').textContent=info.httpsUrls?.[0]||info.urls?.[0]||'Yerel ağ adresi bulunamadı';});
+    window.ishAnatomi.onPhoneCameraFrame(payload=>{const blob=new Blob([payload.jpeg],{type:'image/jpeg'});const url=URL.createObjectURL(blob);const img=box.querySelector('#ish-phone-img');const old=img.dataset.url;if(old)URL.revokeObjectURL(old);img.dataset.url=url;img.src=url;box.querySelector('#ish-phone-quality').textContent=payload.analysis?.quality||'UNKNOWN';box.querySelector('#ish-phone-motion').textContent=payload.motion?.status==='READY'?(Number(payload.motion.normalizedChange)*100).toFixed(1)+'%':'NO_PREVIOUS_FRAME';});
     window.ishAnatomi.onPhoneCameraPose(p=>{box.querySelector('#ish-phone-pose').textContent=[p.alpha,p.beta,p.gamma].map(v=>Number(v).toFixed(1)+'°').join(' / ');});
   })()`;
 }
@@ -250,7 +225,7 @@ async function createWindow() {
     const start=Date.now();let ready=false;while(Date.now()-start<30000){try{await fetch('http://127.0.0.1:3016');ready=true;break}catch{await new Promise(r=>setTimeout(r,400));}}if(!ready){dialog.showErrorBox('ISH-Anatomi','3D anatomi motoru 30 saniye içinde hazır olmadı.');app.quit();return;}
     await win.loadURL('http://127.0.0.1:3016');
   }
-  await win.webContents.executeJavaScript(assistantPanelScript(atlasCatalog?.concepts ?? []));
+  await win.webContents.executeJavaScript(assistantPanelScript());
   if (phoneCamera) win.webContents.send('phone-camera:info', phoneCamera.info());
 }
 
@@ -258,7 +233,6 @@ app.whenReady().then(async()=>{
   await initImaging();
   await initPhoneCamera();
   ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion()}));
-  ipcMain.handle('visual:atlas-match',(_e,payload)=>{const concepts=atlasCatalog?.concepts??[];const id=String(payload?.structureId??'').trim();const confidence=Number(payload?.confidence);if(!id||!Number.isFinite(confidence)||confidence<0.28)return {status:'REJECTED',reason:'LOW_CONFIDENCE'};const concept=concepts.find(item=>String(item?.id??item?.structureId??'')===id);if(!concept)return {status:'REJECTED',reason:'ATLAS_CONCEPT_NOT_FOUND'};lastAtlasStructureId=concept.id??concept.structureId??null;void executeViewerActions([{type:'search',query:concept.name}]);return {status:'MAPPED',structureId:lastAtlasStructureId,name:concept.name,confidence};});
   ipcMain.handle('ai:compile',(_e,text)=>compileIntent(text));
   ipcMain.handle('study:card',(_e,text)=>studyCard(text));
   ipcMain.handle('study:quiz',(_e,count,seed)=>createQuiz(count,seed));
@@ -278,6 +252,7 @@ app.whenReady().then(async()=>{
   ipcMain.handle('imaging:stop',()=>liveController?.stop()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('imaging:frame',(_e,frame)=>liveController?.push(frame)??{status:'NOT_CONFIGURED'});
   ipcMain.handle('phone-camera:status',()=>phoneCamera?.status?.()??{status:'NOT_CONFIGURED'});
+  ipcMain.handle('phone-camera:visual-status',()=>({status:'LOCAL_VISUAL_MATCH_DISABLED',reason:'ANATOMY_MODEL_REQUIRED'}));
   ipcMain.handle('phone-camera:stop',()=>phoneCamera?.stop?.()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('phone-camera:set-virtual',(_e,enabled)=>{virtualCameraState=virtualCamera?virtualCamera.enableVirtualCamera(virtualCameraState,enabled):virtualCameraState;return {status:virtualCameraState?.active?'READY':'DISABLED'};});
   ipcMain.handle('phone-camera:virtual-status',()=>({status:virtualCameraState?.active?'READY':'DISABLED'}));
