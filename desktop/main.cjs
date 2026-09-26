@@ -266,13 +266,52 @@ function fallbackDeviceHubScript() {
   })()`;
 }
 
+function forceDeviceHubScript() {
+  return \`(() => {
+    try {
+      if (!document.body) return false;
+      let hub = document.getElementById('ish-device-hub-force');
+      if (!hub) {
+        hub = document.createElement('aside');
+        hub.id = 'ish-device-hub-force';
+        hub.style.cssText = 'position:fixed!important;right:18px!important;top:18px!important;width:330px!important;z-index:2147483647!important;background:#07111f!important;color:#fff!important;border:2px solid #38bdf8!important;border-radius:14px!important;padding:14px!important;box-shadow:0 18px 60px rgba(0,0,0,.55)!important;font:14px system-ui,sans-serif!important';
+        hub.innerHTML = '<div style="font-size:17px;font-weight:800;margin-bottom:10px">🔌 CİHAZLAR</div><button id="ish-force-camera" type="button" style="width:100%;padding:11px;margin:4px 0;border:0;border-radius:9px;background:#0ea5e9;color:#fff;font-weight:700;cursor:pointer">📷 Kamera Ara</button><button id="ish-force-bt" type="button" style="width:100%;padding:11px;margin:4px 0;border:0;border-radius:9px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">🔵 Bluetooth Ara</button><button id="ish-force-bt-cancel" type="button" style="width:100%;padding:9px;margin:4px 0;border:0;border-radius:9px;background:#334155;color:#fff;cursor:pointer">Bluetooth aramayı iptal et</button><div id="ish-force-status" style="margin-top:9px;color:#cbd5e1;line-height:1.45">Hazır.</div><div id="ish-force-url" style="margin-top:6px;color:#93c5fd;font-size:11px;word-break:break-all"></div>';
+        document.body.appendChild(hub);
+      }
+      const status = hub.querySelector('#ish-force-status');
+      const url = hub.querySelector('#ish-force-url');
+      hub.querySelector('#ish-force-camera').onclick = async () => {
+        status.textContent = 'Yerel kamera sunucusu aranıyor…';
+        try {
+          const info = await window.ishAnatomi.phoneCameraSearch();
+          const chosen = (info?.httpsUrls || info?.urls || [])[0] || '';
+          url.textContent = chosen;
+          status.textContent = chosen ? 'Kamera bulundu. Telefon bu HTTPS adresini açmalı.' : 'Kamera adresi bulunamadı.';
+        } catch (e) { status.textContent = 'Kamera arama hatası: ' + (e?.message || e); }
+      };
+      hub.querySelector('#ish-force-bt').onclick = async () => {
+        status.textContent = 'Bluetooth taranıyor…';
+        if (!navigator.bluetooth) { status.textContent = 'Web Bluetooth bu Electron ortamında kullanılamıyor.'; return; }
+        try {
+          const device = await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+          status.textContent = 'Bluetooth cihazı seçildi: ' + (device.name || device.id || 'İsimsiz');
+        } catch (e) { status.textContent = 'Bluetooth: ' + (e?.message || e); }
+      };
+      hub.querySelector('#ish-force-bt-cancel').onclick = async () => {
+        try { await window.ishAnatomi.bluetoothCancel(); } catch {}
+        status.textContent = 'Bluetooth araması iptal edildi.';
+      };
+      return true;
+    } catch (e) {
+      return false;
+    }
+  })()\`;
+}
+
 async function injectAssistantPanel() {
   if (!win || win.isDestroyed()) return;
-  try {
-    await win.webContents.executeJavaScript(fallbackDeviceHubScript());
-    await win.webContents.executeJavaScript(assistantPanelScript());
-    await win.webContents.executeJavaScript(`(() => { const f=document.getElementById('ish-device-hub-fallback'); if(f) f.remove(); return true; })()`);
-  } catch (error) {
+  try { await win.webContents.executeJavaScript(forceDeviceHubScript()); } catch {}
+  try { await win.webContents.executeJavaScript(assistantPanelScript()); } catch (error) {
     if (win && !win.isDestroyed()) win.webContents.send('desktop:panel-error', {message:error?.message || String(error)});
   }
 }
@@ -296,6 +335,14 @@ async function createWindow() {
     }
     if (list.length === 0 && win && !win.isDestroyed()) win.webContents.send('bluetooth:devices-empty', {status:'NO_BLUETOOTH_DEVICES_FOUND'});
   });
+  win.webContents.session.setPermissionCheckHandler((_webContents, permission) => {
+    if (permission === 'bluetooth') return true;
+    return true;
+  });
+  win.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'bluetooth') return callback(true);
+    callback(true);
+  });
 
   if (app.isPackaged) {
     const index=path.join(atlasDir(),'dist','index.html');
@@ -309,10 +356,13 @@ async function createWindow() {
     const start=Date.now();let ready=false;while(Date.now()-start<30000){try{await fetch('http://127.0.0.1:3016');ready=true;break}catch{await new Promise(r=>setTimeout(r,400));}}if(!ready){dialog.showErrorBox('ISH-Anatomi','3D anatomi motoru 30 saniye içinde hazır olmadı.');app.quit();return;}
     await win.loadURL('http://127.0.0.1:3016');
   }
+  win.webContents.on('dom-ready', () => { void injectAssistantPanel(); });
   win.webContents.on('did-finish-load', () => { void injectAssistantPanel(); });
   win.webContents.on('did-navigate', () => { setTimeout(() => { void injectAssistantPanel(); }, 300); });
   await injectAssistantPanel();
-  setTimeout(() => { void injectAssistantPanel(); }, 1200);
+  setTimeout(() => { void injectAssistantPanel(); }, 700);
+  setTimeout(() => { void injectAssistantPanel(); }, 1800);
+  setTimeout(() => { void injectAssistantPanel(); }, 3500);
   if (phoneCamera) win.webContents.send('phone-camera:info', phoneCamera.info());
 }
 
