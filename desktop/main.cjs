@@ -19,6 +19,7 @@ let phoneImagingStarted = false;
 let phoneFrameSequence = 0;
 let atlasCatalog = null;
 let bluetoothSelectionCallback = null;
+let bluetoothPairingCallback = null;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
@@ -212,6 +213,13 @@ function assistantPanelScript() {
     const disconnectBluetooth=async()=>{try{if(bluetoothDevice?.gatt?.connected)bluetoothDevice.gatt.disconnect();}catch{}bluetoothServer=null;bluetoothDevice=null;btName.textContent='-';btGatt.textContent='DISCONNECTED';btStatus.textContent='Bluetooth bağlantısı kapatıldı.';};
     const connectBluetooth=async()=>{if(!btSupported)return;btStatus.textContent='Bluetooth cihazları aranıyor…';btDevices.innerHTML='';try{const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true});bluetoothDevice=device;btName.textContent=device.name||device.id||'İsimsiz cihaz';device.addEventListener('gattserverdisconnected',()=>{bluetoothServer=null;btGatt.textContent='DISCONNECTED';btStatus.textContent='Bluetooth cihazı ayrıldı.';});if(device.gatt){btStatus.textContent='GATT bağlantısı kuruluyor…';bluetoothServer=await device.gatt.connect();btGatt.textContent=bluetoothServer.connected?'CONNECTED':'DISCONNECTED';btStatus.textContent='Bluetooth cihazı yerel olarak bağlandı. Veri protokolü/karakteristik cihazına göre ayrıca eşlenir.';}else btStatus.textContent='Cihaz bulundu fakat GATT desteği yok.';}catch(e){btStatus.textContent=e?.name==='NotFoundError'?'Bluetooth cihaz seçimi iptal edildi.':'Bluetooth hatası: '+(e?.message||e);}};
     box.querySelector('#ish-bt-connect').addEventListener('click',connectBluetooth);box.querySelector('#ish-bt-cancel').addEventListener('click',()=>window.ishAnatomi.bluetoothCancel());box.querySelector('#ish-bt-disconnect').addEventListener('click',disconnectBluetooth);window.ishAnatomi.onBluetoothDevices(renderBtDevices);
+    window.ishAnatomi.onBluetoothPairingRequest(async details=>{
+      let response={confirmed:false};
+      if(details.pairingKind==='confirm') response.confirmed=window.confirm('Bluetooth cihazı eşleştirilsin mi?\\nCihaz: '+details.deviceId);
+      else if(details.pairingKind==='confirmPin') response.confirmed=window.confirm('Bluetooth PIN eşleşiyor mu?\\nPIN: '+details.pin);
+      else if(details.pairingKind==='providePin'){const pin=window.prompt('Bluetooth PIN girin:');if(pin){response={confirmed:true,pin};}}
+      await window.ishAnatomi.bluetoothPairingResponse(response);
+    });
     let virtualOn=false;const virtualButton=box.querySelector('#ish-phone-virtual');virtualButton.addEventListener('click',async()=>{virtualOn=!virtualOn;const result=await window.ishAnatomi.setVirtualCamera(virtualOn);virtualButton.textContent=virtualOn?'3D Sanal Kamera Açık':'3D Sanal Kamerayı Aç';virtualButton.classList.toggle('active',virtualOn);box.querySelector('#ish-phone-status').textContent=result.status==='READY'?'Telefon yönelimi 3D anatomi kamerasını sürüyor.':'Sanal kamera: '+result.status;});
     window.ishAnatomi.onLiveResult(r=>{box.querySelector('#ish-frame').textContent=r.status||'UNKNOWN';box.querySelector('#ish-anatomy').textContent=r.registration?.structureId||r.anatomy?.status||'UNKNOWN';box.querySelector('#ish-clinical').textContent=r.clinical?.safety?.status||r.clinical?.status||'UNKNOWN';});
     window.ishAnatomi.onPhoneCameraInfo(info=>{box.querySelector('#ish-phone-status').textContent='Telefonu aynı yerel ağa bağla ve aşağıdaki adresi aç.';box.querySelector('#ish-phone-url').textContent=info.httpsUrls?.[0]||info.urls?.[0]||'Yerel ağ adresi bulunamadı';});
@@ -222,6 +230,11 @@ function assistantPanelScript() {
 
 async function createWindow() {
   win = new BrowserWindow({width:1440,height:920,minWidth:1100,minHeight:720,backgroundColor:'#0b1020',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win.webContents.session.setBluetoothPairingHandler((details, callback) => {
+    bluetoothPairingCallback = callback;
+    if (win && !win.isDestroyed()) win.webContents.send('bluetooth:pairing-request', {deviceId: details.deviceId, pairingKind: details.pairingKind, pin: details.pin || null});
+  });
+
   win.webContents.on('select-bluetooth-device', (event, devices, callback) => {
     event.preventDefault();
     bluetoothSelectionCallback = callback;
@@ -269,6 +282,7 @@ app.whenReady().then(async()=>{
   ipcMain.handle('imaging:frame',(_e,frame)=>liveController?.push(frame)??{status:'NOT_CONFIGURED'});
   ipcMain.handle('bluetooth:select', (_e, deviceId) => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const id=typeof deviceId==='string'?deviceId:''; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(id); return {status:id?'SELECTED':'CANCELLED'}; });
   ipcMain.handle('bluetooth:cancel', () => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(''); return {status:'CANCELLED'}; });
+  ipcMain.handle('bluetooth:pairing-response', (_e, response) => { if (!bluetoothPairingCallback) return {status:'NO_PAIRING_REQUEST'}; const cb=bluetoothPairingCallback; bluetoothPairingCallback=null; cb(response || {}); return {status:'RESPONDED'}; });
   ipcMain.handle('phone-camera:status',()=>phoneCamera?.status?.()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('phone-camera:visual-status',()=>({status:'LOCAL_VISUAL_MATCH_DISABLED',reason:'ANATOMY_MODEL_REQUIRED'}));
   ipcMain.handle('phone-camera:stop',()=>phoneCamera?.stop?.()??{status:'NOT_CONFIGURED'});
