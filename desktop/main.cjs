@@ -18,6 +18,7 @@ let previousPhoneFrame;
 let phoneImagingStarted = false;
 let phoneFrameSequence = 0;
 let lastAtlasStructureId = null;
+let atlasCatalog = null;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
@@ -44,14 +45,10 @@ async function initImaging() {
   inferenceAdapter = modelRuntime.createInferenceAdapter({});
   liveController = new LiveImagingController({
     atlasCatalog: atlasCatalog?.concepts ?? [],
-    anatomyLocator: async frame => {
-      if (frame?.source === 'PHONE_CAMERA' && frame?.imageBase64) {
-        const visual = await visionLocalizer.locate(frame);
-        if (visual.status === 'READY') return visual;
-        if (visual.status === 'ERROR') return visual;
-      }
-      return {status:'NOT_CONFIGURED',reason:frame?.source==='PHONE_CAMERA'?'LOCAL_VISUAL_MATCH_REQUIRED':'REAL_ANATOMICAL_LOCALIZER_REQUIRED'};
-    },
+    anatomyLocator: async frame => ({
+      status:'NOT_CONFIGURED',
+      reason:frame?.source==='PHONE_CAMERA'?'LOCAL_VISUAL_MATCH_REQUIRED':'REAL_ANATOMICAL_LOCALIZER_REQUIRED'
+    }),
     inference: async input => inferenceAdapter.infer(input),
     clinicalEngine: async ({frame, sourceFrame, quality, anatomy, inference}) => clinicalAssessment.assessClinicalCase({
       imaging:{modality:'US', frame, sourceFrame, quality, anatomy, inference},
