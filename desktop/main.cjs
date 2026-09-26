@@ -209,10 +209,12 @@ function assistantPanelScript() {
     let bluetoothDevice=null,bluetoothServer=null;
     const btSupported=!!navigator.bluetooth;
     if(!btSupported)btStatus.textContent='Bu Electron/Chromium ortamında Web Bluetooth kullanılamıyor.';
+    else if(navigator.bluetooth.getAvailability) navigator.bluetooth.getAvailability().then(ok=>{if(!ok)btStatus.textContent='Bluetooth adaptörü kullanılabilir görünmüyor. Windows Bluetooth açık mı kontrol edin.';}).catch(()=>{});
     const renderBtDevices=(devices)=>{btDevices.innerHTML='';for(const d of(devices||[])){const row=document.createElement('div');row.className='bt-device';const label=document.createElement('span');label.textContent=d.deviceName||'İsimsiz Bluetooth cihazı';const pick=document.createElement('button');pick.textContent='Bağlan';pick.addEventListener('click',async()=>{await window.ishAnatomi.bluetoothSelect(d.deviceId);});row.append(label,pick);btDevices.appendChild(row);}if(devices?.length)btStatus.textContent='Bluetooth cihazı bulundu. Bağlanmak istediğini seç.';};
     const disconnectBluetooth=async()=>{try{if(bluetoothDevice?.gatt?.connected)bluetoothDevice.gatt.disconnect();}catch{}bluetoothServer=null;bluetoothDevice=null;btName.textContent='-';btGatt.textContent='DISCONNECTED';btStatus.textContent='Bluetooth bağlantısı kapatıldı.';};
     const connectBluetooth=async()=>{if(!btSupported)return;btStatus.textContent='Bluetooth cihazları aranıyor…';btDevices.innerHTML='';try{const device=await navigator.bluetooth.requestDevice({acceptAllDevices:true});bluetoothDevice=device;btName.textContent=device.name||device.id||'İsimsiz cihaz';device.addEventListener('gattserverdisconnected',()=>{bluetoothServer=null;btGatt.textContent='DISCONNECTED';btStatus.textContent='Bluetooth cihazı ayrıldı.';});if(device.gatt){btStatus.textContent='GATT bağlantısı kuruluyor…';bluetoothServer=await device.gatt.connect();btGatt.textContent=bluetoothServer.connected?'CONNECTED':'DISCONNECTED';btStatus.textContent='Bluetooth cihazı yerel olarak bağlandı. Veri protokolü/karakteristik cihazına göre ayrıca eşlenir.';}else btStatus.textContent='Cihaz bulundu fakat GATT desteği yok.';}catch(e){btStatus.textContent=e?.name==='NotFoundError'?'Bluetooth cihaz seçimi iptal edildi.':'Bluetooth hatası: '+(e?.message||e);}};
     box.querySelector('#ish-bt-connect').addEventListener('click',connectBluetooth);box.querySelector('#ish-bt-cancel').addEventListener('click',()=>window.ishAnatomi.bluetoothCancel());box.querySelector('#ish-bt-disconnect').addEventListener('click',disconnectBluetooth);window.ishAnatomi.onBluetoothDevices(renderBtDevices);
+    window.ishAnatomi.onBluetoothDevicesEmpty(info=>{btStatus.textContent='Bluetooth taramasında cihaz bulunamadı. Cihazın BLE olması, açık olması ve Windows Bluetooth\'un açık olması gerekir.';});
     window.ishAnatomi.onBluetoothPairingRequest(async details=>{
       let response={confirmed:false};
       if(details.pairingKind==='confirm') response.confirmed=window.confirm('Bluetooth cihazı eşleştirilsin mi?\\nCihaz: '+details.deviceId);
@@ -240,6 +242,12 @@ async function createWindow() {
     bluetoothSelectionCallback = callback;
     const list = (devices || []).map(device => ({deviceId: device.deviceId, deviceName: device.deviceName || 'İsimsiz Bluetooth cihazı'}));
     if (win && !win.isDestroyed()) win.webContents.send('bluetooth:devices', list);
+    if (list.length === 1 && bluetoothSelectionCallback) {
+      const cb = bluetoothSelectionCallback;
+      bluetoothSelectionCallback = null;
+      cb(list[0].deviceId);
+    }
+    if (list.length === 0 && win && !win.isDestroyed()) win.webContents.send('bluetooth:devices-empty', {status:'NO_BLUETOOTH_DEVICES_FOUND'});
   });
 
   if (app.isPackaged) {
