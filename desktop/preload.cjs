@@ -29,5 +29,6 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   onPhoneCameraFrame: (handler) => ipcRenderer.on('phone-camera:frame', (_event, payload) => handler(payload)),
   onPhoneCameraPose: (handler) => ipcRenderer.on('phone-camera:pose', (_event, pose) => handler(pose)),
   onBluetoothDevices: (handler) => ipcRenderer.on('bluetooth:devices', (_event, devices) => handler(devices)),
+  onBluetoothDevicesEmpty: (handler) => ipcRenderer.on('bluetooth:devices-empty', (_event, info) => handler(info)),
   onBluetoothPairingRequest: (handler) => ipcRenderer.on('bluetooth:pairing-request', (_event, details) => handler(details))
 });
