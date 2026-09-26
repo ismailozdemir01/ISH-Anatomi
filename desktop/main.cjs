@@ -17,6 +17,7 @@ let cameraAnalyzer;
 let previousPhoneFrame;
 let phoneImagingStarted = false;
 let phoneFrameSequence = 0;
+let lastAtlasStructureId = null;
 const root = () => app.getAppPath();
 const atlasDir = () => path.join(root(), 'vendor', 'human-atlas');
 
@@ -150,7 +151,7 @@ async function initPhoneCamera() {
       try { liveResult = await liveController?.push(pipelineFrame); } catch (error) {
         liveResult = {status:'ERROR',reason:error.message};
       }
-      if (liveResult?.atlasMapping?.status === 'MAPPED' && liveResult.atlasMapping.structureId && liveResult.atlasMapping.structureId !== globalThis.__ishLastAtlasStructure) {
+      if (liveResult?.atlasMapping?.status === 'MAPPED' && liveResult.atlasMapping.structureId && liveResult.atlasMapping.structureId !== lastAtlasStructureId) {
         globalThis.__ishLastAtlasStructure = liveResult.atlasMapping.structureId;
         void executeViewerActions([{type:'search',query:liveResult.atlasMapping.structureId}]);
       }
