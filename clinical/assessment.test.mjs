@@ -5,13 +5,13 @@ import {assessClinicalCase, createEmptyEvidenceStore} from './assessment.mjs';
 test('clinical assessment remains blocked without evidence and validated model', () => {
   const result = assessClinicalCase({symptoms:['pain']}, {store:createEmptyEvidenceStore(), modelValidated:false});
   assert.equal(result.safety.status, 'BLOCKED');
-  assert.equal(result.evidenceStatus, 'NOT_CONFIGURED');
+  assert.equal(result.evidenceStatus, 'INSUFFICIENT_DATA');
 });
 
 test('evidence-backed case exposes provenance and remains review-gated', () => {
   const store = {
     chunks: new Map([['d1:0', {id:'d1:0', sourceId:'d1', text:'pain may occur in anatomy', chapter:'C', section:'S'}]]),
-    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', licenseStatus:'OPEN'}]]),
+    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', type:'TEXTBOOK', status:'ACTIVE', contentAvailable:true, licenseStatus:'OPEN'}]]),
     index: new Map([['pain', new Set(['d1:0'])]])
   };
   const result = assessClinicalCase({query:'pain', observations:['pain']}, {store, modelValidated:true});
@@ -24,7 +24,7 @@ test('evidence-backed case exposes provenance and remains review-gated', () => {
 test('imaging safety gates cannot be bypassed by valid evidence alone', () => {
   const store = {
     chunks: new Map([['d1:0', {id:'d1:0', sourceId:'d1', text:'pain may occur in anatomy', chapter:'C', section:'S'}]]),
-    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', licenseStatus:'OPEN'}]]),
+    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', type:'TEXTBOOK', status:'ACTIVE', contentAvailable:true, licenseStatus:'OPEN'}]]),
     index: new Map([['pain', new Set(['d1:0'])]])
   };
   const imaging = {
@@ -43,7 +43,7 @@ test('imaging safety gates cannot be bypassed by valid evidence alone', () => {
 test('explicit registration gate blocks otherwise valid imaging case', () => {
   const store = {
     chunks: new Map([['d1:0', {id:'d1:0', sourceId:'d1', text:'pain may occur in anatomy', chapter:'C', section:'S'}]]),
-    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', licenseStatus:'OPEN'}]]),
+    sourceMap: new Map([['d1', {id:'d1', title:'Open guideline', provider:'Test', type:'TEXTBOOK', status:'ACTIVE', contentAvailable:true, licenseStatus:'OPEN'}]]),
     index: new Map([['pain', new Set(['d1:0'])]])
   };
   const imaging = {

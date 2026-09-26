@@ -8,11 +8,23 @@ const DEFAULT_FPS = 15;
 
 function token() { return crypto.randomBytes(18).toString('base64url'); }
 
-function localAddresses(port, secret) {
+function localAddresses(host, port, secret) {
+  const normalizedHost = String(host ?? '').toLowerCase();
+
+  if (
+    normalizedHost === '127.0.0.1' ||
+    normalizedHost === 'localhost' ||
+    normalizedHost === '::1'
+  ) {
+    return [];
+  }
+
   const urls = [];
   for (const interfaces of Object.values(os.networkInterfaces())) {
     for (const entry of interfaces ?? []) {
-      if (entry && entry.family === 'IPv4' && !entry.internal) urls.push(`http://${entry.address}:${port}/camera/${secret}`);
+      if (entry && entry.family === 'IPv4' && !entry.internal) {
+        urls.push(`http://${entry.address}:${port}/camera/${secret}`);
+      }
     }
   }
   return [...new Set(urls)];
@@ -101,7 +113,7 @@ export class LocalPhoneCameraServer {
   info() {
     const address = this.server?.address();
     const port = typeof address === 'object' && address ? address.port : this.port;
-    return {status:'READY', transport:'HTTP_LOCAL', port, fps:this.fps, urls:localAddresses(port, this.secret), frames:this.frames, lastFrameAt:this.lastFrameAt, lastPoseAt:this.lastPoseAt, secureContextRequired:true};
+    return {status:'READY', transport:'HTTP_LOCAL', port, fps:this.fps, urls:localAddresses(this.host, port, this.secret), frames:this.frames, lastFrameAt:this.lastFrameAt, lastPoseAt:this.lastPoseAt, secureContextRequired:true};
   }
 
   status() { return {...this.info(), connected:!!this.lastFrameAt && Date.now() - this.lastFrameAt < 3000}; }

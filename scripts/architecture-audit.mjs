@@ -5,8 +5,8 @@ const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const SCAN_DIRS=['desktop','local-ai','clinical','imaging','probe','knowledge','camera'];
 const EXTENSIONS=new Set(['.mjs','.cjs']);
 const TEST_RE=/(?:^|[\\/])[^\\/]+\.test\.(?:mjs|cjs)$/;
-const IMPORT_RE=/(?:import\\s+(?:[^'\";]+?\\s+from\\s+)?|import\\s*\\(|require\\s*\\()\\s*['\"]([^'\"]+)['\"]/g;
-const DYNAMIC_ROOT_RE=/path\.join\\(\\s*root\\(\\)\\s*,\\s*(['\"])([^'\"]+)\\1\\s*,\\s*(['\"])([^'\"]+\\.(?:mjs|cjs))\\3\\s*\\)/g;
+const IMPORT_RE=/(?:import\s+(?:[^'";]+?\s+from\s+)?|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g;
+const DYNAMIC_ROOT_RE=/path\.join\(\s*root\(\)\s*,\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+\.(?:mjs|cjs))\3\s*\)/g;
 const REQUIRED_RUNTIME=['local-ai/intent.mjs','local-ai/catalog.mjs','local-ai/knowledge.mjs','local-ai/study.mjs','clinical/engine.cjs','clinical/assessment.mjs','clinical/safety.mjs','imaging/core.mjs','imaging/pipeline.mjs','imaging/quality.mjs','imaging/enhancement.mjs','imaging/live-controller.mjs','imaging/anatomy-registration.mjs','imaging/atlas-mapping.mjs','imaging/temporal.mjs','imaging/model-runtime.mjs','imaging/interop.mjs','imaging/calibration.mjs','imaging/coordinate-space.mjs','imaging/evidence-session.mjs','probe/manager.mjs','probe/stream.mjs','knowledge/library.mjs','knowledge/clinical-evidence.mjs','knowledge/evidence-engine.mjs','knowledge/evidence-graph.mjs','knowledge/ontology.mjs','knowledge/source-ingestion.mjs','knowledge/source-registry.mjs','knowledge/medical-reference-library.mjs','knowledge/anatomy-reference-groups.mjs','camera/local-phone-camera.mjs','camera/frame-analysis.mjs','camera/pose-filter.mjs','camera/virtual-camera.mjs'];
 async function walk(dir){const out=[];for(const entry of await fs.readdir(dir,{withFileTypes:true})){const full=path.join(dir,entry.name);if(entry.isDirectory())out.push(...await walk(full));else if(EXTENSIONS.has(path.extname(entry.name)))out.push(full);}return out;}
 const normalize=p=>p.split(path.sep).join('/');const relativeId=file=>normalize(path.relative(ROOT,file));

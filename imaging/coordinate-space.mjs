@@ -4,7 +4,7 @@ export function identityTransform(){return [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];}
 export function validateRigidTransform(m){
   if(!finiteMatrix(m))return {valid:false,reason:'INVALID_TRANSFORM'};
   const axes=[[m[0],m[1],m[2]],[m[4],m[5],m[6]],[m[8],m[9],m[10]]];
-  const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],norm=a=>Math.sqrt(dot(a,a)),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]);
+  const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],norm=a=>Math.sqrt(dot(a,a)),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
   const det=dot(axes[0],cross(axes[1],axes[2]));
   if(axes.some(r=>Math.abs(norm(r)-1)>0.03)||Math.abs(dot(axes[0],axes[1]))>0.03||Math.abs(dot(axes[0],axes[2]))>0.03||Math.abs(dot(axes[1],axes[2]))>0.03||Math.abs(det-1)>0.05||Math.abs(m[3])>1e-3||Math.abs(m[7])>1e-3||Math.abs(m[11])>1e-3||Math.abs(m[15]-1)>1e-3)return {valid:false,reason:'NON_RIGID_TRANSFORM'};
   return {valid:true};
