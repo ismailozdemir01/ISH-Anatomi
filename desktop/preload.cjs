@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   bluetoothSelect: (deviceId) => ipcRenderer.invoke('bluetooth:select', deviceId),
   bluetoothCancel: () => ipcRenderer.invoke('bluetooth:cancel'),
   bluetoothPairingResponse: (response) => ipcRenderer.invoke('bluetooth:pairing-response', response),
+  bluetoothData: (packet) => ipcRenderer.invoke('bluetooth:data', packet),
   studyCard: (text) => ipcRenderer.invoke('study:card', text),
   createQuiz: (count, seed) => ipcRenderer.invoke('study:quiz', count, seed),
   clinicalAssess: (payload) => ipcRenderer.invoke('clinical:assess', payload),
