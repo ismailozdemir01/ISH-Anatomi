@@ -261,7 +261,7 @@ app.whenReady().then(async()=>{
   await initImaging();
   await initPhoneCamera();
   ipcMain.handle('app:info',()=>({name:'ISH-Anatomi',version:app.getVersion()}));
-  ipcMain.handle('visual:atlas-match',(_e,payload)=>{const concepts=atlasCatalog?.concepts??[];const id=String(payload?.structureId??'').trim();const confidence=Number(payload?.confidence);if(!id||!Number.isFinite(confidence)||confidence<0.55)return {status:'REJECTED',reason:'LOW_CONFIDENCE'};const concept=concepts.find(item=>String(item?.id??item?.structureId??'')===id);if(!concept)return {status:'REJECTED',reason:'ATLAS_CONCEPT_NOT_FOUND'};lastAtlasStructureId=concept.id??concept.structureId??null;void executeViewerActions([{type:'search',query:concept.name}]);return {status:'MAPPED',structureId:lastAtlasStructureId,name:concept.name,confidence};});
+  ipcMain.handle('visual:atlas-match',(_e,payload)=>{const concepts=atlasCatalog?.concepts??[];const id=String(payload?.structureId??'').trim();const confidence=Number(payload?.confidence);if(!id||!Number.isFinite(confidence)||confidence<0.28)return {status:'REJECTED',reason:'LOW_CONFIDENCE'};const concept=concepts.find(item=>String(item?.id??item?.structureId??'')===id);if(!concept)return {status:'REJECTED',reason:'ATLAS_CONCEPT_NOT_FOUND'};lastAtlasStructureId=concept.id??concept.structureId??null;void executeViewerActions([{type:'search',query:concept.name}]);return {status:'MAPPED',structureId:lastAtlasStructureId,name:concept.name,confidence};});
   ipcMain.handle('ai:compile',(_e,text)=>compileIntent(text));
   ipcMain.handle('study:card',(_e,text)=>studyCard(text));
   ipcMain.handle('study:quiz',(_e,count,seed)=>createQuiz(count,seed));
