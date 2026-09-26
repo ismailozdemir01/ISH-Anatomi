@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   appInfo: () => ipcRenderer.invoke('app:info'),
   compileIntent: (text) => ipcRenderer.invoke('ai:compile', text),
   visualAtlasMatch: (payload) => ipcRenderer.invoke('visual:atlas-match', payload),
+  bluetoothSelect: (deviceId) => ipcRenderer.invoke('bluetooth:select', deviceId),
+  bluetoothCancel: () => ipcRenderer.invoke('bluetooth:cancel'),
   studyCard: (text) => ipcRenderer.invoke('study:card', text),
   createQuiz: (count, seed) => ipcRenderer.invoke('study:quiz', count, seed),
   clinicalAssess: (payload) => ipcRenderer.invoke('clinical:assess', payload),
@@ -24,5 +26,6 @@ contextBridge.exposeInMainWorld('ishAnatomi', {
   onViewerActions: (handler) => ipcRenderer.on('viewer:actions:apply', (_event, actions) => handler(actions)),
   onPhoneCameraInfo: (handler) => ipcRenderer.on('phone-camera:info', (_event, info) => handler(info)),
   onPhoneCameraFrame: (handler) => ipcRenderer.on('phone-camera:frame', (_event, payload) => handler(payload)),
-  onPhoneCameraPose: (handler) => ipcRenderer.on('phone-camera:pose', (_event, pose) => handler(pose))
+  onPhoneCameraPose: (handler) => ipcRenderer.on('phone-camera:pose', (_event, pose) => handler(pose)),
+  onBluetoothDevices: (handler) => ipcRenderer.on('bluetooth:devices', (_event, devices) => handler(devices))
 });
