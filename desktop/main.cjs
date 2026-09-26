@@ -17,6 +17,8 @@ let cameraAnalyzer;
 let previousPhoneFrame;
 let phoneImagingStarted = false;
 let phoneFrameSequence = 0;
+let usbFrameSequence = 0;
+let usbCameraActive = false;
 let atlasCatalog = null;
 let bluetoothSelectionCallback = null;
 let bluetoothPairingCallback = null;
@@ -143,6 +145,65 @@ async function initPhoneCamera() {
     }
   });
   return phoneCamera.start();
+}
+
+
+function localMediaHubScript() {
+  return \`(() => {
+    const root=document.getElementById('ish-local-assistant');
+    if(!root || document.getElementById('ish-local-media')) return;
+    const section=document.createElement('section');
+    section.id='ish-local-media';
+    section.innerHTML='<strong>USB Kamera / Ultrasonik UVC Prob</strong><div class="status" id="ish-usb-status">USB video cihazları hazır değil.</div><select id="ish-usb-devices" style="width:100%;margin-top:5px;padding:7px;border-radius:7px;background:#0f172a;color:#fff;border:1px solid #475569"></select><button id="ish-usb-scan" type="button" style="width:100%;margin-top:5px">🔍 USB Kamera / Prob Ara</button><button id="ish-usb-start" type="button" style="width:100%;margin-top:4px">▶ Seçili Cihazı Başlat</button><button id="ish-usb-stop" type="button" style="width:100%;margin-top:4px">■ Durdur</button><video id="ish-usb-preview" autoplay playsinline muted style="display:none;width:100%;max-height:130px;object-fit:contain;background:#000;border-radius:8px;margin-top:5px"></video><canvas id="ish-usb-canvas" hidden></canvas><div class="metric"><span>Kaynak</span><span id="ish-usb-kind">-</span></div><div class="metric"><span>Akış</span><span id="ish-usb-stream">IDLE</span></div>';
+    root.appendChild(section);
+    const status=section.querySelector('#ish-usb-status'),select=section.querySelector('#ish-usb-devices'),preview=section.querySelector('#ish-usb-preview'),canvas=section.querySelector('#ish-usb-canvas'),kindEl=section.querySelector('#ish-usb-kind'),streamEl=section.querySelector('#ish-usb-stream');
+    let stream=null,running=false;
+    const classify=(label)=>/ultra|sono|sonography|probe|transducer|usg|echocardi|echograph|convex|linear.*probe|micr?o.?convex/i.test(label||'')?'ULTRASOUND_UVC':'USB_CAMERA';
+    const stopLocal=async()=>{running=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}preview.srcObject=null;streamEl.textContent='IDLE';try{await window.ishAnatomi.usbCameraStop();}catch{}};
+    const scan=async()=>{
+      status.textContent='USB video cihazları taranıyor…';
+      try{
+        if(!navigator.mediaDevices?.getUserMedia) throw new Error('Electron medya erişimi kullanılamıyor');
+        const probe=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        probe.getTracks().forEach(t=>t.stop());
+        const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+        select.innerHTML='';
+        if(!devices.length){status.textContent='USB kamera/UVC prob bulunamadı.';return;}
+        for(const d of devices){const o=document.createElement('option');o.value=d.deviceId;o.textContent=(d.label||'Video cihazı')+' · '+classify(d.label);o.dataset.kind=classify(d.label);select.appendChild(o);}
+        const selected=select.options[0];kindEl.textContent=selected?.dataset.kind||'-';status.textContent=devices.length+' video cihazı bulundu.';
+        select.onchange=()=>{const o=select.selectedOptions[0];kindEl.textContent=o?.dataset.kind||'-';};
+      }catch(e){status.textContent='USB kamera erişimi: '+(e?.message||e);}
+    };
+    const start=async()=>{
+      const deviceId=select.value;
+      if(!deviceId){status.textContent='Önce USB cihaz ara ve seç.';return;}
+      await stopLocal();
+      const kind=select.selectedOptions[0]?.dataset.kind||'USB_CAMERA';
+      try{
+        const startResult=await window.ishAnatomi.usbCameraStart(deviceId,kind);
+        if(startResult?.status!=='STARTED'){status.textContent='USB akış başlatılamadı: '+(startResult?.reason||startResult?.status||'UNKNOWN');return;}
+        stream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:15,max:20}},audio:false});
+        preview.srcObject=stream;preview.style.display='block';await preview.play().catch(()=>{});
+        running=true;streamEl.textContent='STREAMING';status.textContent=kind==='ULTRASOUND_UVC'?'Gerçek UVC ultrason görüntüsü ISH-Anatomi pipelineına aktarılıyor.':'USB kamera görüntüsü ISH-Anatomi pipelineına aktarılıyor.';
+        const ctx=canvas.getContext('2d',{willReadFrequently:true});let last=0;
+        const pump=async(now)=>{
+          if(!running)return;
+          if(now-last>=66 && preview.readyState>=2 && preview.videoWidth){
+            last=now;canvas.width=preview.videoWidth;canvas.height=preview.videoHeight;ctx.drawImage(preview,0,0,canvas.width,canvas.height);
+            const blob=await new Promise(r=>canvas.toBlob(r,'image/jpeg',.78));
+            if(blob){const bytes=new Uint8Array(await blob.arrayBuffer());try{await window.ishAnatomi.usbCameraFrame({bytes,width:canvas.width,height:canvas.height,timestamp:Date.now()});}catch(e){status.textContent='USB frame aktarımı: '+(e?.message||e);}}
+          }
+          requestAnimationFrame(pump);
+        };
+        requestAnimationFrame(pump);
+      }catch(e){await stopLocal();status.textContent='USB cihaz başlatılamadı: '+(e?.message||e);}
+    };
+    section.querySelector('#ish-usb-scan').onclick=scan;
+    section.querySelector('#ish-usb-start').onclick=start;
+    section.querySelector('#ish-usb-stop').onclick=stopLocal;
+    if(navigator.mediaDevices?.addEventListener) navigator.mediaDevices.addEventListener('devicechange',()=>void scan());
+    void scan();
+  })()\`;
 }
 
 async function localModules() {
@@ -311,6 +372,7 @@ async function injectAssistantPanel() {
   try { await win.webContents.executeJavaScript(assistantPanelScript()); } catch (error) {
     if (win && !win.isDestroyed()) win.webContents.send('desktop:panel-error', {message:error?.message || String(error)});
   }
+  try { await win.webContents.executeJavaScript(localMediaHubScript()); } catch (error) { console.error('[local-media-panel]', error?.message || error); }
 }
 
 async function createWindow() {
@@ -395,8 +457,36 @@ app.whenReady().then(async()=>{
   ipcMain.handle('bluetooth:select', (_e, deviceId) => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const id=typeof deviceId==='string'?deviceId:''; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(id); return {status:id?'SELECTED':'CANCELLED'}; });
   ipcMain.handle('bluetooth:cancel', () => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(''); return {status:'CANCELLED'}; });
   ipcMain.handle('bluetooth:pairing-response', (_e, response) => { if (!bluetoothPairingCallback) return {status:'NO_PAIRING_REQUEST'}; const cb=bluetoothPairingCallback; bluetoothPairingCallback=null; cb(response || {}); return {status:'RESPONDED'}; });
+
+  ipcMain.handle('usb-camera:start', async (_e, deviceId, kind='USB_CAMERA') => {
+    if (!liveController) return {status:'NOT_CONFIGURED', reason:'IMAGING_CONTROLLER_REQUIRED'};
+    usbCameraActive = true;
+    usbFrameSequence = 0;
+    liveController.start({transport:'usb', source:kind === 'ULTRASOUND_UVC' ? 'USB_ULTRASOUND_UVC' : 'USB_CAMERA', deviceId});
+    return {status:'STARTED', source:kind === 'ULTRASOUND_UVC' ? 'USB_ULTRASOUND_UVC' : 'USB_CAMERA'};
+  });
+  ipcMain.handle('usb-camera:stop', () => {
+    usbCameraActive = false;
+    return liveController?.stop?.() ?? {status:'NOT_CONFIGURED'};
+  });
+  ipcMain.handle('usb-camera:frame', async (_e, payload) => {
+    if (!usbCameraActive || !payload?.bytes) return {status:'NOT_RUNNING'};
+    const buffer = Buffer.from(payload.bytes);
+    if (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return {status:'INVALID_FRAME', reason:'JPEG_REQUIRED'};
+    const image = nativeImage.createFromBuffer(buffer);
+    const size = image.getSize();
+    if (!size.width || !size.height) return {status:'INVALID_FRAME', reason:'IMAGE_DECODE_FAILED'};
+    const bitmap = image.toBitmap();
+    const gray = new Uint8Array(size.width * size.height);
+    for (let i=0,p=0;i<gray.length;i+=1,p+=4) gray[i]=Math.round(bitmap[p]*0.114+bitmap[p+1]*0.587+bitmap[p+2]*0.299);
+    const source = liveController?.pipeline?.session?.source || 'USB_CAMERA';
+    const frame = {id:'usb-'+(++usbFrameSequence),source,width:size.width,height:size.height,timestamp:Number(payload.timestamp)||Date.now(),data:gray,metadata:{timestamp:Number(payload.timestamp)||Date.now(),frameNumber:usbFrameSequence},imageBase64:buffer.toString('base64')};
+    const result = await liveController.push(frame);
+    if (win && !win.isDestroyed()) win.webContents.send('usb-camera:result',{result,jpeg:buffer,width:size.width,height:size.height});
+    return {status:result?.status||'UNKNOWN'};
+  });
   ipcMain.handle('phone-camera:search',()=>phoneCamera?.info?.()??{status:'NOT_CONFIGURED'});
-  ipcMain.handle('phone-camera:start',async()=>{if(!phoneCamera)return {status:'NOT_CONFIGURED'};return phoneCamera.start();});
+  ipcMain.handle('phone-camera:start',async()=>{if(!phoneCamera)return {status:'NOT_CONFIGURED'};const info=await phoneCamera.start();return {...info,status:'STARTED'};});
   ipcMain.handle('phone-camera:status',()=>phoneCamera?.status?.()??{status:'NOT_CONFIGURED'});
   ipcMain.handle('phone-camera:visual-status',()=>({status:'LOCAL_VISUAL_MATCH_DISABLED',reason:'ANATOMY_MODEL_REQUIRED'}));
   ipcMain.handle('phone-camera:stop',()=>phoneCamera?.stop?.()??{status:'NOT_CONFIGURED'});
