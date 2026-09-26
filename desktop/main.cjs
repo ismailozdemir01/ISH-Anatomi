@@ -22,6 +22,7 @@ let usbCameraActive = false;
 let atlasCatalog = null;
 let bluetoothSelectionCallback = null;
 let bluetoothPairingCallback = null;
+let lastBluetoothPacket = null;
 // Electron Chromium Web Bluetooth is explicitly enabled for the local desktop runtime.
 app.commandLine.appendSwitch('enable-experimental-web-platform-features');
 app.commandLine.appendSwitch('enable-features','WebBluetooth');
@@ -464,6 +465,7 @@ app.whenReady().then(async()=>{
   ipcMain.handle('bluetooth:select', (_e, deviceId) => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const id=typeof deviceId==='string'?deviceId:''; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(id); return {status:id?'SELECTED':'CANCELLED'}; });
   ipcMain.handle('bluetooth:cancel', () => { if (!bluetoothSelectionCallback) return {status:'NO_PENDING_REQUEST'}; const cb=bluetoothSelectionCallback; bluetoothSelectionCallback=null; cb(''); return {status:'CANCELLED'}; });
   ipcMain.handle('bluetooth:pairing-response', (_e, response) => { if (!bluetoothPairingCallback) return {status:'NO_PAIRING_REQUEST'}; const cb=bluetoothPairingCallback; bluetoothPairingCallback=null; cb(response || {}); return {status:'RESPONDED'}; });
+  ipcMain.handle('bluetooth:data', (_e, packet) => { lastBluetoothPacket = packet && typeof packet === 'object' ? packet : null; if (win && !win.isDestroyed()) win.webContents.send('bluetooth:data-update', lastBluetoothPacket); return {status:'RECEIVED',bytes:lastBluetoothPacket?.bytes?.length||0}; });
 
   ipcMain.handle('usb-camera:start', async (_e, deviceId, kind='USB_CAMERA') => {
     if (!liveController) return {status:'NOT_CONFIGURED', reason:'IMAGING_CONTROLLER_REQUIRED'};
