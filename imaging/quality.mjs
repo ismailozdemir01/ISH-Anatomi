@@ -41,7 +41,7 @@ export function assessFrameQuality(frame) {
   const clipping = values.filter(v => v <= 3 || v >= 252).length / values.length;
   const artifactPenalty = Math.min(1, clipping * 1.8);
   const score = clamp(contrast * 0.35 + dynamicRange * 0.25 + coverage * 0.25 + (1 - artifactPenalty) * 0.15);
-  const status = score >= 0.78 ? QUALITY_STATUS.GOOD : score >= 0.58 ? QUALITY_STATUS.FAIR : score >= 0.35 ? QUALITY_STATUS.POOR : QUALITY_STATUS.INSUFFICIENT;
+  const status = (contrast < 0.25 && dynamicRange < 0.20) ? QUALITY_STATUS.INSUFFICIENT : score >= 0.78 ? QUALITY_STATUS.GOOD : score >= 0.58 ? QUALITY_STATUS.FAIR : score >= 0.35 ? QUALITY_STATUS.POOR : QUALITY_STATUS.INSUFFICIENT;
   const reasons = [];
   if (dynamicRange < 0.20) reasons.push('LOW_DYNAMIC_RANGE');
   if (contrast < 0.25) reasons.push('LOW_CONTRAST');
