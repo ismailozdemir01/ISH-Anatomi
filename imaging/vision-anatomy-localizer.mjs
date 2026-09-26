@@ -88,6 +88,7 @@ export function createVisionAnatomyLocalizer({
           lastResult = {
             status:'READY',
             structureId:concept.id ?? concept.structureId ?? null,
+            name:concept.name ?? query,
             groupId:concept.groupId ?? null,
             confidence,
             query,
